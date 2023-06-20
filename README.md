@@ -14,15 +14,6 @@ Open Telemetry tracing:
    client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
    resp, errGet := client.Do(req)
 
-
-			httpAddr:       env.String("HTTP_ADDR", ":8001"),
-			httpRoute:      env.String("HTTP_ROUTE", "/send"),
-			jaegerURL:      env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
-			queueURLInput:  env.String("QUEUE_URL_INPUT", ""),
-			queueURLOutput: env.String("QUEUE_URL_OUTPUT", ""),
-			backendURL:     env.String("BACKEND_URL", "http://localhost:8002/send"),
-
-
 ```
 # Jaeger
 ./run-jaeger-local.sh
