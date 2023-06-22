@@ -1,7 +1,8 @@
 # opentelemetry-trace-sqs
+
 opentelemetry-trace-sqs
 
-Open Telemetry tracing:
+# Open Telemetry tracing recipe
 
 1) Initialize the tracing (see main.go)
 2) Enable trace propagation (see tracePropagation below)
@@ -20,6 +21,8 @@ router.Use(otelgin.Middleware("virtual-service"))
     client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
     resp, errGet := client.Do(req)
 ```
+
+# Test trace propagation across SQS
 
 ```
 # Jaeger
