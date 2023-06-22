@@ -25,15 +25,17 @@ import (
 )
 
 type appConfig struct {
-	httpAddr           string
-	httpRoute          string
-	jaegerURL          string
-	queueURLInput      string
-	queueURLOutput     string
-	queueRoleARNInput  string
-	queueRoleARNOutput string
-	backendURL         string
-	endpointURL        string
+	httpAddr               string
+	httpRoute              string
+	jaegerURL              string
+	queueURLInput          string
+	queueURLOutput         string
+	queueRoleARNInput      string
+	queueRoleARNOutput     string
+	queueTraceIDAttrInput  string
+	queueTraceIDAttrOutput string
+	backendURL             string
+	endpointURL            string
 }
 
 type application struct {
@@ -63,15 +65,17 @@ func main() {
 	app := &application{
 		me: filepath.Base(os.Args[0]),
 		config: appConfig{
-			httpAddr:           env.String("HTTP_ADDR", ":8001"),
-			httpRoute:          env.String("HTTP_ROUTE", "/send"),
-			jaegerURL:          env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
-			queueURLInput:      env.String("QUEUE_URL_INPUT", ""),
-			queueURLOutput:     env.String("QUEUE_URL_OUTPUT", ""),
-			queueRoleARNInput:  env.String("QUEUE_ROLE_ARN_INPUT", ""),
-			queueRoleARNOutput: env.String("QUEUE_ROLE_ARN_OUTPUT", ""),
-			backendURL:         env.String("BACKEND_URL", "http://localhost:8002/send"),
-			endpointURL:        env.String("ENDPOINT_URL", ""),
+			httpAddr:               env.String("HTTP_ADDR", ":8001"),
+			httpRoute:              env.String("HTTP_ROUTE", "/send"),
+			jaegerURL:              env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
+			queueURLInput:          env.String("QUEUE_URL_INPUT", ""),
+			queueURLOutput:         env.String("QUEUE_URL_OUTPUT", ""),
+			queueRoleARNInput:      env.String("QUEUE_ROLE_ARN_INPUT", ""),
+			queueRoleARNOutput:     env.String("QUEUE_ROLE_ARN_OUTPUT", ""),
+			queueTraceIDAttrInput:  env.String("QUEUE_TRACE_ID_ATTR_INPUT", "traceId"),
+			queueTraceIDAttrOutput: env.String("QUEUE_TRACE_ID_ATTR_OUTPUT", "traceId"),
+			backendURL:             env.String("BACKEND_URL", "http://localhost:8002/send"),
+			endpointURL:            env.String("ENDPOINT_URL", ""),
 		},
 	}
 
@@ -149,7 +153,9 @@ func handlerRoute(c *gin.Context, app *application) {
 	newCtx, span := app.tracer.Start(ctx, me)
 	defer span.End()
 
-	log.Printf("%s: traceID=%s", me, span.SpanContext().TraceID())
+	traceID := span.SpanContext().TraceID().String()
+
+	log.Printf("%s: traceID=%s from HTTP", me, traceID)
 
 	buf, errBody := io.ReadAll(c.Request.Body)
 	if errBody != nil {
@@ -157,31 +163,35 @@ func handlerRoute(c *gin.Context, app *application) {
 	}
 
 	str := string(buf)
+
 	msg := types.Message{
 		Body: &str,
 	}
+
+	sqsSetTraceID(&msg, app.config.queueTraceIDAttrOutput, traceID)
 
 	//
 	// send to SQS
 	//
 
-	forwardSQS(ctx, app, msg)
+	sqsSend(ctx, app, msg)
 
 	//
 	// send to HTTP
 	//
 
-	errBackend := backend(newCtx, app, bytes.NewBuffer(buf))
+	errBackend := httpBackend(newCtx, app, bytes.NewBuffer(buf))
 	if errBackend != nil {
-		msg := fmt.Sprintf("%s: %v", me, errBackend)
-		span.SetStatus(codes.Error, msg)
-		c.String(500, msg)
+		m := fmt.Sprintf("%s: %v", me, errBackend)
+		log.Print(m)
+		span.SetStatus(codes.Error, m)
+		c.String(500, m)
 		return
 	}
 }
 
-func backend(ctx context.Context, app *application, body io.Reader) error {
-	const me = "backend"
+func httpBackend(ctx context.Context, app *application, body io.Reader) error {
+	const me = "httpBackend"
 
 	newCtx, span := app.tracer.Start(ctx, me)
 	defer span.End()
