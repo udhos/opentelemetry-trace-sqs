@@ -21,16 +21,24 @@ Open Telemetry tracing:
 open jaeger: http://localhost:16686
 
 # Server 1
+export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q1
+export QUEUE_URL_OUTPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q2
 export OTEL_SERVICE_NAME=opentelemetry-trace-sqs-gin-1
+export HTTP_ADDR=:8001
+export BACKEND_URL=http://localhost:8002/send
 opentelemetry-trace-sqs-gin
 
 # Server 2
+export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q2
+export QUEUE_URL_OUTPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q3
 export OTEL_SERVICE_NAME=opentelemetry-trace-sqs-gin-2
 export HTTP_ADDR=:8002
 export BACKEND_URL=http://localhost:8003/send
 opentelemetry-trace-sqs-gin
 
 # Server 3
+export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q3
+export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q4
 export OTEL_SERVICE_NAME=opentelemetry-trace-sqs-gin-3
 export HTTP_ADDR=:8003
 export BACKEND_URL=http://wrong:8002/send

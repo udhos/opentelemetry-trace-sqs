@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -23,19 +25,24 @@ import (
 )
 
 type appConfig struct {
-	httpAddr       string
-	httpRoute      string
-	jaegerURL      string
-	queueURLInput  string
-	queueURLOutput string
-	backendURL     string
+	httpAddr           string
+	httpRoute          string
+	jaegerURL          string
+	queueURLInput      string
+	queueURLOutput     string
+	queueRoleARNInput  string
+	queueRoleARNOutput string
+	backendURL         string
+	endpointURL        string
 }
 
 type application struct {
-	me     string
-	config appConfig
-	server *serverGin
-	tracer trace.Tracer
+	me          string
+	config      appConfig
+	server      *serverGin
+	tracer      trace.Tracer
+	queueInput  sqsQueue
+	queueOutput sqsQueue
 }
 
 type serverGin struct {
@@ -53,15 +60,18 @@ func newServerGin(addr string) *serverGin {
 
 func main() {
 
-	app := application{
+	app := &application{
 		me: filepath.Base(os.Args[0]),
 		config: appConfig{
-			httpAddr:       env.String("HTTP_ADDR", ":8001"),
-			httpRoute:      env.String("HTTP_ROUTE", "/send"),
-			jaegerURL:      env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
-			queueURLInput:  env.String("QUEUE_URL_INPUT", ""),
-			queueURLOutput: env.String("QUEUE_URL_OUTPUT", ""),
-			backendURL:     env.String("BACKEND_URL", "http://localhost:8002/send"),
+			httpAddr:           env.String("HTTP_ADDR", ":8001"),
+			httpRoute:          env.String("HTTP_ROUTE", "/send"),
+			jaegerURL:          env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
+			queueURLInput:      env.String("QUEUE_URL_INPUT", ""),
+			queueURLOutput:     env.String("QUEUE_URL_OUTPUT", ""),
+			queueRoleARNInput:  env.String("QUEUE_ROLE_ARN_INPUT", ""),
+			queueRoleARNOutput: env.String("QUEUE_ROLE_ARN_OUTPUT", ""),
+			backendURL:         env.String("BACKEND_URL", "http://localhost:8002/send"),
+			endpointURL:        env.String("ENDPOINT_URL", ""),
 		},
 	}
 
@@ -104,7 +114,14 @@ func main() {
 	app.server = newServerGin(app.config.httpAddr)
 	app.server.router.Use(otelgin.Middleware(app.me))
 	app.server.router.Use(gin.Logger())
-	app.server.router.Any(app.config.httpRoute, func(c *gin.Context) { handlerRoute(c, &app) })
+	app.server.router.Any(app.config.httpRoute, func(c *gin.Context) { handlerRoute(c, app) })
+
+	//
+	// initalize sqs
+	//
+
+	app.queueInput = newSqsClient("input sqs queue", app.config.queueURLInput, app.config.queueRoleARNInput, app.me, app.config.endpointURL)
+	app.queueOutput = newSqsClient("output sqs queue", app.config.queueURLOutput, app.config.queueRoleARNOutput, app.me, app.config.endpointURL)
 
 	//
 	// start http server
@@ -115,6 +132,12 @@ func main() {
 		err := app.server.server.ListenAndServe()
 		log.Fatalf("application server: exited: %v", err)
 	}()
+
+	//
+	// start sqs
+	//
+
+	go sqsListener(app)
 
 	<-make(chan struct{}) // wait forever
 }
@@ -128,7 +151,27 @@ func handlerRoute(c *gin.Context, app *application) {
 
 	log.Printf("%s: traceID=%s", me, span.SpanContext().TraceID())
 
-	errBackend := backend(newCtx, app, c.Request.Body)
+	buf, errBody := io.ReadAll(c.Request.Body)
+	if errBody != nil {
+		return
+	}
+
+	str := string(buf)
+	msg := types.Message{
+		Body: &str,
+	}
+
+	//
+	// send to SQS
+	//
+
+	forwardSQS(ctx, app, msg)
+
+	//
+	// send to HTTP
+	//
+
+	errBackend := backend(newCtx, app, bytes.NewBuffer(buf))
 	if errBackend != nil {
 		msg := fmt.Sprintf("%s: %v", me, errBackend)
 		span.SetStatus(codes.Error, msg)
