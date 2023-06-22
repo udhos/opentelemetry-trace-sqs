@@ -212,8 +212,7 @@ func sqsForward(app *application, msg types.Message) {
 	sqsSetTraceID(&msg, app.config.queueTraceIDAttrOutput, traceID)
 
 	// create trace from traceID
-	ctxOld := newTraceFromID(traceID)
-	ctx, span := app.tracer.Start(ctxOld, me)
+	ctx, span := app.tracer.Start(newTraceFromID(traceID), me)
 	defer span.End()
 
 	//

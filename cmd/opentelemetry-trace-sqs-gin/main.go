@@ -149,8 +149,7 @@ func main() {
 func handlerRoute(c *gin.Context, app *application) {
 	const me = "handlerRoute"
 
-	ctx := c.Request.Context()
-	newCtx, span := app.tracer.Start(ctx, me)
+	ctx, span := app.tracer.Start(c.Request.Context(), me)
 	defer span.End()
 
 	traceID := span.SpanContext().TraceID().String()
@@ -180,7 +179,7 @@ func handlerRoute(c *gin.Context, app *application) {
 	// send to HTTP
 	//
 
-	errBackend := httpBackend(newCtx, app, bytes.NewBuffer(buf))
+	errBackend := httpBackend(ctx, app, bytes.NewBuffer(buf))
 	if errBackend != nil {
 		m := fmt.Sprintf("%s: %v", me, errBackend)
 		log.Print(m)
