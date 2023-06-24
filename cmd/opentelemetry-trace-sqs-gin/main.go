@@ -122,7 +122,7 @@ func main() {
 	app.server.router.Any(app.config.httpRoute, func(c *gin.Context) { handlerRoute(c, app) })
 
 	//
-	// initalize sqs
+	// initialize sqs
 	//
 
 	app.queueInput = newSqsClient("input sqs queue", app.config.queueURLInput, app.config.queueRoleARNInput, app.me, app.config.endpointURL)
