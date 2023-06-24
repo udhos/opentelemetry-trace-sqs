@@ -54,18 +54,16 @@ const stringType = "String"
 
 // Set stores a key-value pair.
 func (c *SqsCarrierAttributes) Set(key, value string) {
-
 	if c.sqsMessage.MessageAttributes == nil {
 		c.sqsMessage.MessageAttributes = map[string]types.MessageAttributeValue{}
 	}
-
 	c.sqsMessage.MessageAttributes[key] = types.MessageAttributeValue{
 		DataType:    aws.String(stringType),
 		StringValue: aws.String(value),
 	}
 }
 
-// Keys list the keys in the carrier.
+// Keys lists the keys in the carrier.
 func (c *SqsCarrierAttributes) Keys() []string {
 	if c.sqsMessage.MessageAttributes == nil {
 		return nil
