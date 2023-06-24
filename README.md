@@ -33,6 +33,8 @@ func handleSQSMessage(app *application, msg types.Message) {
 
 ## Inject trace context into SQS message before sending
 
+Use `sqsotel.InjectIntoSqsAttributes()` to inject trace context into SQS message before sending it.
+
 ```go
 import (
     "github.com/aws/aws-sdk-go-v2/service/sqs/types"
