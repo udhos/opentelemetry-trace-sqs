@@ -4,7 +4,7 @@
 
 # opentelemetry-trace-sqs
 
-opentelemetry-trace-sqs
+[opentelemetry-trace-sqs](https://github.com/udhos/opentelemetry-trace-sqs) propagates Open Telemetry tracing with SQS messages.
 
 # B3 Propagation
 
