@@ -24,11 +24,14 @@ import (
 
 // msg is SQS message
 func handleSQSMessage(app *application, msg types.Message) {
-	ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
-	ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
-	defer span.End()
+    // Extract the tracing context from a received SQS message
+    ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
 
-    // now handle the SQS message
+    // Use the trace context as usual, for instance, starting a new span
+    ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
+    defer span.End()
+
+    // Now handle the SQS message
 ```
 
 ## Inject trace context into SQS message before sending
@@ -44,11 +47,15 @@ import (
 // ctx is currenct tracing context
 // msg is SQS message
 func sendSQSMessage(ctx context.Context, app *application, msg types.Message) {
-    sqsotel.InjectIntoSqsAttributes(ctx, &msg)
+    // You have a trace context in 'ctx' that you need to propagate into SQS message 'msg'
+    ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
+    defer span.End()
 
-    // now send the SQS message
+    // Inject the tracing context
+    sqsotel.InjectIntoSqsAttributes(ctxNew, &msg)
+
+    // Now you can send the SQS message
 ```
-
 
 # Open Telemetry tracing recipe for GIN and HTTP
 
@@ -71,9 +78,9 @@ GIN - Get context with c.Request.Context()
 ```go
 // gin
 func handlerRoute(c *gin.Context, app *application) {
-	const me = "handlerRoute"
-	ctx, span := app.tracer.Start(c.Request.Context(), me)
-	defer span.End()
+    const me = "handlerRoute"
+    ctx, span := app.tracer.Start(c.Request.Context(), me)
+    defer span.End()
 // ...
 ```
 
@@ -91,8 +98,8 @@ HTTP - Get context with r.Context()
 ```go
 func httpHandler(w http.ResponseWriter, r *http.Request) {
     const me = "httpHandler"
-	ctx, span := app.tracer.Start(r.Context(), me)
-	defer span.End()
+    ctx, span := app.tracer.Start(r.Context(), me)
+    defer span.End()
 // ...
 ```
 
