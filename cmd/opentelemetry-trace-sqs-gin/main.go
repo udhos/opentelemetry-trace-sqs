@@ -168,7 +168,7 @@ func handlerRoute(c *gin.Context, app *application) {
 		Body: &str,
 	}
 
-	sqsotel.InjectIntoSqsAttributes(ctx, &msg)
+	sqsotel.InjectIntoSqsMessageAttributes(ctx, &msg)
 
 	//
 	// send to SQS

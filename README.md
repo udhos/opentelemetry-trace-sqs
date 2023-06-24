@@ -36,7 +36,7 @@ func handleSQSMessage(app *application, msg types.Message) {
 
 ## Inject trace context into SQS message before sending
 
-Use `sqsotel.InjectIntoSqsAttributes()` to inject trace context into SQS message before sending it.
+Use `sqsotel.InjectIntoSqsMessageAttributes()` to inject trace context into SQS message before sending it.
 
 ```go
 import (
@@ -52,7 +52,7 @@ func sendSQSMessage(ctx context.Context, app *application, msg types.Message) {
     defer span.End()
 
     // Inject the tracing context
-    sqsotel.InjectIntoSqsAttributes(ctxNew, &msg)
+    sqsotel.InjectIntoSqsMessageAttributes(ctxNew, &msg)
 
     // Now you can send the SQS message
 ```

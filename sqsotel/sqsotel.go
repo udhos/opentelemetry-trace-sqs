@@ -19,8 +19,8 @@ func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context 
 	return ctx
 }
 
-// InjectIntoSqsAttributes inserts tracing from context into the SQS message attributes.
-func InjectIntoSqsAttributes(ctx context.Context, sqsMessage *types.Message) {
+// InjectIntoSqsMessageAttributes inserts tracing from context into the SQS message attributes.
+func InjectIntoSqsMessageAttributes(ctx context.Context, sqsMessage *types.Message) {
 	carrier := NewCarrierAttributes(sqsMessage)
 	sqsPropagator.Inject(ctx, carrier)
 }
