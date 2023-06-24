@@ -13,20 +13,34 @@ https://github.com/openzipkin/b3-propagation
 Use `sqsotel.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
 
 ```go
-import "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+import (
+    "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+    "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+)
 
+// msg is SQS message
 func handleSQSMessage(app *application, msg types.Message) {
 	ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
 	ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
 	defer span.End()
+
+    // now handle the SQS message
 ```
 
 ## Inject trace context into SQS message before sending
 
 ```go
+import (
+    "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+    "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+)
+
 // ctx is currenct tracing context
 // msg is SQS message
-sqsotel.InjectIntoSqsAttributes(ctx, &msg)
+func sendSQSMessage(ctx context.Context, app *application, msg types.Message) {
+    sqsotel.InjectIntoSqsAttributes(ctx, &msg)
+
+    // now send the SQS message
 ```
 
 
