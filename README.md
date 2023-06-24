@@ -1,3 +1,7 @@
+[![license](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/udhos/opentelemetry-trace-sqs/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/udhos/opentelemetry-trace-sqs)](https://goreportcard.com/report/github.com/udhos/opentelemetry-trace-sqs)
+[![Go Reference](https://pkg.go.dev/badge/github.com/udhos/opentelemetry-trace-sqs.svg)](https://pkg.go.dev/github.com/udhos/opentelemetry-trace-sqs)
+
 # opentelemetry-trace-sqs
 
 opentelemetry-trace-sqs
