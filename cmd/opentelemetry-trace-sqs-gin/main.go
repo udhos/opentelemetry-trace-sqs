@@ -22,6 +22,7 @@ import (
 
 	"github.com/udhos/opentelemetry-trace-sqs/internal/env"
 	"github.com/udhos/opentelemetry-trace-sqs/internal/tracing"
+	"github.com/udhos/opentelemetry-trace-sqs/sqsotel"
 )
 
 type appConfig struct {
@@ -167,7 +168,7 @@ func handlerRoute(c *gin.Context, app *application) {
 		Body: &str,
 	}
 
-	sqsSetTraceID(&msg, app.config.queueTraceIDAttrOutput, traceID)
+	sqsotel.InjectIntoSqsAttributes(ctx, &msg)
 
 	//
 	// send to SQS

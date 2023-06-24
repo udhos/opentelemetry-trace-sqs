@@ -2,24 +2,87 @@
 
 opentelemetry-trace-sqs
 
-# Open Telemetry tracing recipe
+# B3 Propagation
 
-1) Initialize the tracing (see main.go)
-2) Enable trace propagation (see tracePropagation below)
-3) Use handler middleware (see main.go)
+https://github.com/openzipkin/b3-propagation
+
+# Tracing propagation with SQS
+
+## Extract trace from SQS received message
+
+Use `sqsotel.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
 
 ```go
+import "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+
+func handleSQSMessage(app *application, msg types.Message) {
+	ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
+	ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
+	defer span.End()
+```
+
+## Inject trace context into SQS message before sending
+
+```go
+// ctx is currenct tracing context
+// msg is SQS message
+sqsotel.InjectIntoSqsAttributes(ctx, &msg)
+```
+
+
+# Open Telemetry tracing recipe for GIN and HTTP
+
+1) Initialize the tracing - see main.go
+2) Enable trace propagation - see internal/tracing
+3) Retrieve Retrieve tracing from request context
+
+3.1) If using GIN
+
+GIN - Use otelgin middleware
+
+```go
+// gin
 import "go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 router.Use(otelgin.Middleware("virtual-service"))
 ```
 
-4) For http client, create a Request from Context (see backend.go)
+GIN - Get context with c.Request.Context()
 
 ```go
-    newCtx, span := b.tracer.Start(ctx, "backendHTTP.fetch")
-    req, errReq := http.NewRequestWithContext(newCtx, "GET", u, nil)
-    client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-    resp, errGet := client.Do(req)
+// gin
+func handlerRoute(c *gin.Context, app *application) {
+	const me = "handlerRoute"
+	ctx, span := app.tracer.Start(c.Request.Context(), me)
+	defer span.End()
+// ...
+```
+
+3.2) If using standard http package
+
+HTTP - Wrap handler with otelhttp.NewHandler
+
+```go
+wrappedHandler := otelhttp.NewHandler(handler, "hello-instrumented")
+http.Handle("/hello-instrumented", wrappedHandler)
+```
+
+HTTP - Get context with r.Context()
+
+```go
+func httpHandler(w http.ResponseWriter, r *http.Request) {
+    const me = "httpHandler"
+	ctx, span := app.tracer.Start(r.Context(), me)
+	defer span.End()
+// ...
+```
+
+4) For http client, create a Request from Context and wrap transport with otelhttp.NewTransport
+
+```go
+newCtx, span := app.tracer.Start(ctx, "backendHTTP.fetch")
+req, errReq := http.NewRequestWithContext(newCtx, "GET", u, nil)
+client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+resp, errGet := client.Do(req)
 ```
 
 # Test trace propagation across SQS

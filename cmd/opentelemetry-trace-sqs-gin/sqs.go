@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/udhos/boilerplate/awsconfig"
+	"github.com/udhos/opentelemetry-trace-sqs/sqsotel"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type sqsQueue struct {
@@ -149,49 +149,6 @@ func sqsListener(app *application) {
 
 }
 
-func sqsSetTraceID(msg *types.Message, attribute, traceID string) {
-
-	if msg.MessageAttributes == nil {
-		msg.MessageAttributes = map[string]types.MessageAttributeValue{}
-	}
-
-	msg.MessageAttributes[attribute] = types.MessageAttributeValue{
-		DataType:    aws.String(stringType),
-		StringValue: aws.String(traceID),
-	}
-}
-
-const stringType = "String"
-
-func sqsGetTraceID(msg types.Message, attribute string) string {
-
-	attr, found := msg.MessageAttributes[attribute]
-	if !found {
-		return ""
-	}
-
-	if attr.StringValue == nil {
-		return ""
-	}
-
-	return *attr.StringValue
-}
-
-func newTraceFromID(traceID string) context.Context {
-	const me = "newTraceFromID"
-
-	tID, errTraceID := trace.TraceIDFromHex(traceID)
-	if errTraceID != nil {
-		log.Printf("%s: error creating traceID: %s: %v", me, traceID, errTraceID)
-	}
-
-	bg := context.Background()
-	spanCtx := trace.SpanContextFromContext(bg).WithTraceID(tID)
-	ctx := trace.ContextWithSpanContext(bg, spanCtx)
-
-	return ctx
-}
-
 // sqsForward sends message to both SQS and HTTP.
 // will retrieve traceID from msg,
 // reset traceID back into msg (since incoming attr might differ from outgoing attr),
@@ -200,30 +157,23 @@ func sqsForward(app *application, msg types.Message) {
 
 	const me = "sqsForward"
 
-	//
-	// handle traceID
-	//
+	ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
 
-	// retrieve traceID from sqs attribute
-	traceID := sqsGetTraceID(msg, app.config.queueTraceIDAttrInput)
-	log.Printf("%s: traceID=[%s] fromSQS ", me, traceID)
-
-	// propagate traceID for sqs attribute
-	sqsSetTraceID(&msg, app.config.queueTraceIDAttrOutput, traceID)
-
-	// create trace from traceID
-	ctx, span := app.tracer.Start(newTraceFromID(traceID), me)
+	ctxNew, span := app.tracer.Start(ctx, me)
 	defer span.End()
+
+	traceID := span.SpanContext().TraceID().String()
+	log.Printf("%s: traceID=%s", me, traceID)
 
 	//
 	// send to SQS
 	//
-	sqsSend(ctx, app, msg)
+	sqsSend(ctxNew, app, msg)
 
 	//
 	// send to HTTP
 	//
-	errHTTP := httpBackend(ctx, app, bytes.NewBufferString(*msg.Body))
+	errHTTP := httpBackend(ctxNew, app, bytes.NewBufferString(*msg.Body))
 	if errHTTP != nil {
 		m := fmt.Sprintf("%s: %v", me, errHTTP)
 		log.Print(m)
