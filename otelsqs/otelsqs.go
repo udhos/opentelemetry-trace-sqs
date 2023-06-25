@@ -10,6 +10,8 @@ Use `otelsqs.ContextFromSqsMessageAttributes()` to extract trace context from SQ
 		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 	)
 
+	// handleSQSMessage is an example function that uses ContextFromSqsMessageAttributes to
+	// extract tracing context from inbound SQS message.
 	func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
 		// Extract the tracing context from a received SQS message
 		ctx := otelsqs.ContextFromSqsMessageAttributes(&inboundSqsMessage)
@@ -30,7 +32,9 @@ Use `otelsqs.InjectIntoSqsMessageAttributes()` to inject trace context into SQS 
 		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 	)
 
-	// 'ctx' is current tracing context
+	// sendSQSMessage is an example function that uses InjectIntoSqsMessageAttributes to
+	// propagate tracing context into outgoing SQS message.
+	// 'ctx' holds current tracing context.
 	func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage types.Message) {
 		// You have a trace context in 'ctx' that you need to propagate into SQS message 'outboundSqsMessage'
 		ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
