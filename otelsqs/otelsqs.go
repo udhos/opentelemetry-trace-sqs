@@ -62,6 +62,8 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 }
 
 // ContextFromSqsMessageAttributes gets a tracing context from SQS message attributes.
+// `sqsMessage` is incoming, received SQS message (possibly) carring trace information in the message attributes.
+// Use ContextFromSqsMessageAttributes right after receiving an SQS message.
 func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context {
 	ctxOrig := context.Background()
 	carrier := NewCarrierAttributes(sqsMessage)
@@ -70,6 +72,9 @@ func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context 
 }
 
 // InjectIntoSqsMessageAttributes inserts tracing from context into the SQS message attributes.
+// `ctx` holds current context with trace information.
+// `sqsMessage` is outgoing SQS message that will be set to carry trace information.
+// Use InjectIntoSqsMessageAttributes right before sending out the SQS message.
 func InjectIntoSqsMessageAttributes(ctx context.Context, sqsMessage *types.Message) {
 	carrier := NewCarrierAttributes(sqsMessage)
 	sqsPropagator.Inject(ctx, carrier)
