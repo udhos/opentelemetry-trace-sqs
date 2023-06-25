@@ -60,11 +60,11 @@ func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage ty
 
 # Open Telemetry tracing recipe for GIN and HTTP
 
-1) Initialize the tracing - see main.go
-2) Enable trace propagation - see internal/tracing
-3) Retrieve Retrieve tracing from request context
+1. Initialize the tracing - see main.go
+2. Enable trace propagation - see internal/tracing
+3. Retrieve tracing from request context
 
-3.1) If using GIN
+3.1. If using GIN
 
 GIN - Use otelgin middleware
 
@@ -85,7 +85,7 @@ func handlerRoute(c *gin.Context, app *application) {
 // ...
 ```
 
-3.2) If using standard http package
+3.2. If using standard http package
 
 HTTP - Wrap handler with otelhttp.NewHandler
 
@@ -104,7 +104,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 // ...
 ```
 
-4) For http client, create a Request from Context and wrap transport with otelhttp.NewTransport
+4. For http client, create a Request from Context and wrap transport with otelhttp.NewTransport
 
 ```go
 newCtx, span := app.tracer.Start(ctx, "backendHTTP.fetch")
