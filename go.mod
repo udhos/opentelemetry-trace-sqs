@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.18.1
+	github.com/aws/aws-sdk-go-v2/service/sns v1.20.13
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.23.2
 	github.com/gin-gonic/gin v1.9.1
 	github.com/udhos/boilerplate v1.2.0

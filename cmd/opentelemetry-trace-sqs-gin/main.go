@@ -22,7 +22,7 @@ import (
 
 	"github.com/udhos/opentelemetry-trace-sqs/internal/env"
 	"github.com/udhos/opentelemetry-trace-sqs/internal/tracing"
-	"github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+	"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
 type appConfig struct {
@@ -153,9 +153,7 @@ func handlerRoute(c *gin.Context, app *application) {
 	ctx, span := app.tracer.Start(c.Request.Context(), me)
 	defer span.End()
 
-	traceID := span.SpanContext().TraceID().String()
-
-	log.Printf("%s: traceID=%s from HTTP", me, traceID)
+	log.Printf("%s: traceID=%s from HTTP", me, span.SpanContext().TraceID().String())
 
 	buf, errBody := io.ReadAll(c.Request.Body)
 	if errBody != nil {
@@ -168,7 +166,7 @@ func handlerRoute(c *gin.Context, app *application) {
 		Body: &str,
 	}
 
-	sqsotel.InjectIntoSqsMessageAttributes(ctx, &msg)
+	otelsqs.InjectIntoSqsMessageAttributes(ctx, &msg)
 
 	//
 	// send to SQS

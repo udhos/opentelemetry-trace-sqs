@@ -14,45 +14,46 @@ https://github.com/openzipkin/b3-propagation
 
 ## Extract trace from SQS received message
 
-Use `sqsotel.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
+Use `otelsqs.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
 
 ```go
 import (
     "github.com/aws/aws-sdk-go-v2/service/sqs/types"
-    "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+    "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
-// msg is SQS message
-func handleSQSMessage(app *application, msg types.Message) {
+func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
     // Extract the tracing context from a received SQS message
-    ctx := sqsotel.ContextFromSqsMessageAttributes(&msg)
+    ctx := otelsqs.ContextFromSqsMessageAttributes(&inboundSqsMessage)
 
     // Use the trace context as usual, for instance, starting a new span
     ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
     defer span.End()
+
+    // One could log the traceID
+    log.Printf("handleSQSMessage: traceID=%s", span.SpanContext().TraceID().String())
 
     // Now handle the SQS message
 ```
 
 ## Inject trace context into SQS message before sending
 
-Use `sqsotel.InjectIntoSqsMessageAttributes()` to inject trace context into SQS message before sending it.
+Use `otelsqs.InjectIntoSqsMessageAttributes()` to inject trace context into SQS message before sending it.
 
 ```go
 import (
     "github.com/aws/aws-sdk-go-v2/service/sqs/types"
-    "github.com/udhos/opentelemetry-trace-sqs/sqsotel"
+    "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
-// ctx is currenct tracing context
-// msg is SQS message
-func sendSQSMessage(ctx context.Context, app *application, msg types.Message) {
-    // You have a trace context in 'ctx' that you need to propagate into SQS message 'msg'
+// 'ctx' is current tracing context
+func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage types.Message) {
+    // You have a trace context in 'ctx' that you need to propagate into SQS message 'outboundSqsMessage'
     ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
     defer span.End()
 
     // Inject the tracing context
-    sqsotel.InjectIntoSqsMessageAttributes(ctxNew, &msg)
+    otelsqs.InjectIntoSqsMessageAttributes(ctxNew, &outboundSqsMessage)
 
     // Now you can send the SQS message
 ```

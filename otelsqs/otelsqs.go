@@ -1,5 +1,47 @@
-// Package sqsotel implements carriers for SQS.
-package sqsotel
+/*
+Package otelsqs implements carrier for SQS.
+
+# Usage
+
+Use `otelsqs.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
+
+	import (
+		"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
+	)
+
+	func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
+		// Extract the tracing context from a received SQS message
+		ctx := otelsqs.ContextFromSqsMessageAttributes(&inboundSqsMessage)
+
+		// Use the trace context as usual, for instance, starting a new span
+		ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
+		defer span.End()
+
+		// One could log the traceID
+		log.Printf("handleSQSMessage: traceID=%s", span.SpanContext().TraceID().String())
+
+		// Now handle the SQS message
+
+Use `otelsqs.InjectIntoSqsMessageAttributes()` to inject trace context into SQS message before sending it.
+
+	import (
+		"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
+	)
+
+	// 'ctx' is current tracing context
+	func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage types.Message) {
+		// You have a trace context in 'ctx' that you need to propagate into SQS message 'outboundSqsMessage'
+		ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
+		defer span.End()
+
+		// Inject the tracing context
+		otelsqs.InjectIntoSqsMessageAttributes(ctxNew, &outboundSqsMessage)
+
+		// Now you can send the SQS message
+*/
+package otelsqs
 
 import (
 	"context"
@@ -7,9 +49,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"go.opentelemetry.io/contrib/propagators/b3"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var sqsPropagator = b3.New() // b3 single header
+
+// SetTextMapPropagator optionally replaces the default propagator (B3 with single header).
+// Please notice that SQS only supports up to 10 attributes, then be careful when picking
+// another propagator that might consume multiple attributes.
+func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
+	sqsPropagator = propagator
+}
 
 // ContextFromSqsMessageAttributes gets a tracing context from SQS message attributes.
 func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context {
