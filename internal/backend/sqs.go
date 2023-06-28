@@ -1,4 +1,4 @@
-package main
+package backend
 
 import (
 	"bytes"
@@ -14,16 +14,19 @@ import (
 	"github.com/udhos/boilerplate/awsconfig"
 	"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-type sqsQueue struct {
-	client *sqs.Client
-	URL    string
+// SqsQueue holds sqs client.
+type SqsQueue struct {
+	SqsClient *sqs.Client
+	URL       string
 }
 
-func newSqsClient(caller, queueURL, roleArn, roleSessionName, endpointURL string) sqsQueue {
+// NewSqsClient creates sqs client.
+func NewSqsClient(caller, queueURL, roleArn, roleSessionName, endpointURL string) SqsQueue {
 
-	const me = "newSqsClient"
+	const me = "NewSqsClient"
 
 	region, errRegion := getRegion(queueURL)
 	if errRegion != nil {
@@ -42,9 +45,9 @@ func newSqsClient(caller, queueURL, roleArn, roleSessionName, endpointURL string
 		log.Fatalf("%s: %s: aws config error: %v", me, caller, errRegion)
 	}
 
-	q := sqsQueue{
-		client: sqs.NewFromConfig(cfg.AwsConfig),
-		URL:    queueURL,
+	q := SqsQueue{
+		SqsClient: sqs.NewFromConfig(cfg.AwsConfig),
+		URL:       queueURL,
 	}
 
 	return q
@@ -60,11 +63,20 @@ func getRegion(queueURL string) (string, error) {
 	return region, nil
 }
 
-func sqsListener(app *application) {
+// SqsApplication holds sqs application.
+type SqsApplication struct {
+	QueueInput  SqsQueue
+	QueueOutput SqsQueue
+	Tracer      trace.Tracer
+	BackendURL  string
+}
 
-	const me = "sqsListener"
+// SqsListener runs sqs application.
+func SqsListener(app *SqsApplication) {
 
-	q := app.queueInput
+	const me = "SqsListener"
+
+	q := app.QueueInput
 
 	debug := true
 
@@ -93,7 +105,7 @@ func sqsListener(app *application) {
 
 		//m.receive.WithLabelValues(queueID).Inc()
 
-		resp, errRecv := q.client.ReceiveMessage(context.TODO(), input)
+		resp, errRecv := q.SqsClient.ReceiveMessage(context.TODO(), input)
 		if errRecv != nil {
 			log.Printf("%s: sqs.ReceiveMessage: error: %v, sleeping %v",
 				me, errRecv, cooldown)
@@ -128,7 +140,7 @@ func sqsListener(app *application) {
 				log.Printf("%s: %d/%d MessageId: %s", me, i+1, count, *msg.MessageId)
 			}
 
-			sqsForward(app, msg)
+			sqsHandle(app, msg)
 
 			//
 			// delete from source queue
@@ -138,7 +150,7 @@ func sqsListener(app *application) {
 				QueueUrl:      aws.String(q.URL),
 				ReceiptHandle: msg.ReceiptHandle,
 			}
-			_, errDelete := q.client.DeleteMessage(context.TODO(), inputDelete)
+			_, errDelete := q.SqsClient.DeleteMessage(context.TODO(), inputDelete)
 			if errDelete != nil {
 				log.Printf("%s: MessageId: %s - sqs.DeleteMessage: error: %v, sleeping %v",
 					me, *msg.MessageId, errDelete, cooldown)
@@ -149,17 +161,16 @@ func sqsListener(app *application) {
 
 }
 
-// sqsForward sends message to both SQS and HTTP.
+// sqsHandle forwards SQS message to both SQS and HTTP.
 // will retrieve traceID from sqsMessage,
-// reset traceID back into sqsMessage (since incoming attr might differ from outgoing attr),
 // and create a context with traceID for HTTP.
-func sqsForward(app *application, sqsMessage types.Message) {
+func sqsHandle(app *SqsApplication, sqsMessage types.Message) {
 
-	const me = "sqsForward"
+	const me = "sqsHandle"
 
 	ctx := otelsqs.ContextFromSqsMessageAttributes(&sqsMessage)
 
-	ctxNew, span := app.tracer.Start(ctx, me)
+	ctxNew, span := app.Tracer.Start(ctx, me)
 	defer span.End()
 
 	log.Printf("%s: traceID=%s", me, span.SpanContext().TraceID().String())
@@ -167,12 +178,12 @@ func sqsForward(app *application, sqsMessage types.Message) {
 	//
 	// send to SQS
 	//
-	sqsSend(ctxNew, app, sqsMessage)
+	SqsSend(ctx, app.Tracer, app.QueueOutput.URL, app.QueueOutput.SqsClient, sqsMessage)
 
 	//
 	// send to HTTP
 	//
-	errHTTP := httpBackend(ctxNew, app, bytes.NewBufferString(*sqsMessage.Body))
+	errHTTP := HTTPBackend(ctxNew, app.Tracer, app.BackendURL, bytes.NewBufferString(*sqsMessage.Body))
 	if errHTTP != nil {
 		m := fmt.Sprintf("%s: %v", me, errHTTP)
 		log.Print(m)
@@ -180,23 +191,23 @@ func sqsForward(app *application, sqsMessage types.Message) {
 	}
 }
 
-// sqsSend only submits message to SQS.
+// SqsSend only submits message to SQS.
 // attribute with traceID must have been set in sqsMessage.
-func sqsSend(ctx context.Context, app *application, sqsMessage types.Message) {
+func SqsSend(ctx context.Context, tracer trace.Tracer, queueURL string, sqsClient *sqs.Client, sqsMessage types.Message) {
 
-	const me = "sqsSend"
+	const me = "SqsSend"
 
-	newCtx, span := app.tracer.Start(ctx, me)
+	newCtx, span := tracer.Start(ctx, me)
 	defer span.End()
 
 	input := &sqs.SendMessageInput{
-		QueueUrl:          aws.String(app.config.queueURLOutput),
+		QueueUrl:          aws.String(queueURL),
 		DelaySeconds:      0, // 0..900
 		MessageAttributes: sqsMessage.MessageAttributes,
 		MessageBody:       sqsMessage.Body,
 	}
 
-	_, errSend := app.queueOutput.client.SendMessage(newCtx, input)
+	_, errSend := sqsClient.SendMessage(newCtx, input)
 	if errSend != nil {
 		m := fmt.Sprintf("%s: MessageId: %s - SendMessage: error: %v",
 			me, *sqsMessage.MessageId, errSend)

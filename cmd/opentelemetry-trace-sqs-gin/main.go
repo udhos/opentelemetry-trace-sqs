@@ -15,37 +15,23 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/udhos/opentelemetry-trace-sqs/internal/env"
+	"github.com/udhos/opentelemetry-trace-sqs/internal/backend"
+	"github.com/udhos/opentelemetry-trace-sqs/internal/config"
 	"github.com/udhos/opentelemetry-trace-sqs/internal/tracing"
 	"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
-type appConfig struct {
-	httpAddr               string
-	httpRoute              string
-	jaegerURL              string
-	queueURLInput          string
-	queueURLOutput         string
-	queueRoleARNInput      string
-	queueRoleARNOutput     string
-	queueTraceIDAttrInput  string
-	queueTraceIDAttrOutput string
-	backendURL             string
-	endpointURL            string
-}
-
 type application struct {
 	me          string
-	config      appConfig
+	config      config.AppConfig
 	server      *serverGin
 	tracer      trace.Tracer
-	queueInput  sqsQueue
-	queueOutput sqsQueue
+	queueInput  backend.SqsQueue
+	queueOutput backend.SqsQueue
 }
 
 type serverGin struct {
@@ -64,20 +50,8 @@ func newServerGin(addr string) *serverGin {
 func main() {
 
 	app := &application{
-		me: filepath.Base(os.Args[0]),
-		config: appConfig{
-			httpAddr:               env.String("HTTP_ADDR", ":8001"),
-			httpRoute:              env.String("HTTP_ROUTE", "/send"),
-			jaegerURL:              env.String("JAEGER_URL", "http://jaeger-collector:14268/api/traces"),
-			queueURLInput:          env.String("QUEUE_URL_INPUT", ""),
-			queueURLOutput:         env.String("QUEUE_URL_OUTPUT", ""),
-			queueRoleARNInput:      env.String("QUEUE_ROLE_ARN_INPUT", ""),
-			queueRoleARNOutput:     env.String("QUEUE_ROLE_ARN_OUTPUT", ""),
-			queueTraceIDAttrInput:  env.String("QUEUE_TRACE_ID_ATTR_INPUT", "traceId"),
-			queueTraceIDAttrOutput: env.String("QUEUE_TRACE_ID_ATTR_OUTPUT", "traceId"),
-			backendURL:             env.String("BACKEND_URL", "http://localhost:8002/send"),
-			endpointURL:            env.String("ENDPOINT_URL", ""),
-		},
+		me:     filepath.Base(os.Args[0]),
+		config: config.New(),
 	}
 
 	//
@@ -85,7 +59,7 @@ func main() {
 	//
 
 	{
-		tp, errTracer := tracing.TracerProvider(app.me, app.config.jaegerURL)
+		tp, errTracer := tracing.TracerProvider(app.me, app.config.JaegerURL)
 		if errTracer != nil {
 			log.Fatalf("tracer provider: %v", errTracer)
 		}
@@ -116,24 +90,24 @@ func main() {
 	// initialize http
 	//
 
-	app.server = newServerGin(app.config.httpAddr)
+	app.server = newServerGin(app.config.HTTPAddr)
 	app.server.router.Use(otelgin.Middleware(app.me))
 	app.server.router.Use(gin.Logger())
-	app.server.router.Any(app.config.httpRoute, func(c *gin.Context) { handlerRoute(c, app) })
+	app.server.router.Any(app.config.HTTPRoute, func(c *gin.Context) { handlerRoute(c, app) })
 
 	//
 	// initialize sqs
 	//
 
-	app.queueInput = newSqsClient("input sqs queue", app.config.queueURLInput, app.config.queueRoleARNInput, app.me, app.config.endpointURL)
-	app.queueOutput = newSqsClient("output sqs queue", app.config.queueURLOutput, app.config.queueRoleARNOutput, app.me, app.config.endpointURL)
+	app.queueInput = backend.NewSqsClient("input sqs queue", app.config.QueueURLInput, app.config.QueueRoleARNInput, app.me, app.config.EndpointURL)
+	app.queueOutput = backend.NewSqsClient("output sqs queue", app.config.QueueURLOutput, app.config.QueueRoleARNOutput, app.me, app.config.EndpointURL)
 
 	//
 	// start http server
 	//
 
 	go func() {
-		log.Printf("application server: listening on %s", app.config.httpAddr)
+		log.Printf("application server: listening on %s", app.config.HTTPAddr)
 		err := app.server.server.ListenAndServe()
 		log.Fatalf("application server: exited: %v", err)
 	}()
@@ -142,7 +116,14 @@ func main() {
 	// start sqs
 	//
 
-	go sqsListener(app)
+	sqsApp := &backend.SqsApplication{
+		QueueInput:  app.queueInput,
+		QueueOutput: app.queueOutput,
+		Tracer:      app.tracer,
+		BackendURL:  app.config.BackendURL,
+	}
+
+	go backend.SqsListener(sqsApp)
 
 	<-make(chan struct{}) // wait forever
 }
@@ -172,45 +153,18 @@ func handlerRoute(c *gin.Context, app *application) {
 	// send to SQS
 	//
 
-	sqsSend(ctx, app, msg)
+	backend.SqsSend(ctx, app.tracer, app.config.QueueURLOutput, app.queueOutput.SqsClient, msg)
 
 	//
 	// send to HTTP
 	//
 
-	errBackend := httpBackend(ctx, app, bytes.NewBuffer(buf))
+	errBackend := backend.HTTPBackend(ctx, app.tracer, app.config.BackendURL, bytes.NewBuffer(buf))
 	if errBackend != nil {
-		m := fmt.Sprintf("%s: %v", me, errBackend)
+		m := fmt.Sprintf("%s: %v\n", me, errBackend)
 		log.Print(m)
 		span.SetStatus(codes.Error, m)
 		c.String(500, m)
 		return
 	}
-}
-
-func httpBackend(ctx context.Context, app *application, body io.Reader) error {
-	const me = "httpBackend"
-
-	newCtx, span := app.tracer.Start(ctx, me)
-	defer span.End()
-
-	log.Printf("%s: traceID=%s", me, span.SpanContext().TraceID())
-
-	req, errReq := http.NewRequestWithContext(newCtx, "POST", app.config.backendURL, body)
-	if errReq != nil {
-		log.Printf("%s: URL=%s request error: %v", me, app.config.backendURL, errReq)
-		return errReq
-	}
-
-	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-
-	resp, errGet := client.Do(req)
-	if errGet != nil {
-		log.Printf("%s: URL=%s server error: %v", me, app.config.backendURL, errGet)
-		return errGet
-	}
-
-	defer resp.Body.Close()
-
-	return nil
 }
