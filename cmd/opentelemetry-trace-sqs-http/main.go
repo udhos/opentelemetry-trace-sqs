@@ -119,15 +119,15 @@ func main() {
 }
 
 type handler struct {
-	h http.HandlerFunc
+	f http.HandlerFunc
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.h(w, r)
+	h.f(w, r)
 }
 
 func register(mux *http.ServeMux, operation, addr, path string, handlerFunc http.HandlerFunc) {
-	h := &handler{h: handlerFunc}
+	h := &handler{f: handlerFunc}
 	mux.Handle(path, otelhttp.NewHandler(h, operation))
 	log.Printf("registered %s on port %s path %s", operation, addr, path)
 }
