@@ -171,7 +171,7 @@ func handlerRoute(app *application, w http.ResponseWriter, r *http.Request) {
 	// send to SQS
 	//
 
-	backend.SqsSend(ctx, app.tracer, app.config.QueueURLOutput, app.queueOutput.SqsClient, msg)
+	backend.SqsSend(ctx, app.tracer, app.queueOutput, msg)
 
 	//
 	// send to HTTP

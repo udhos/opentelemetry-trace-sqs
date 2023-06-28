@@ -178,7 +178,7 @@ func sqsHandle(app *SqsApplication, sqsMessage types.Message) {
 	//
 	// send to SQS
 	//
-	SqsSend(ctx, app.Tracer, app.QueueOutput.URL, app.QueueOutput.SqsClient, sqsMessage)
+	SqsSend(ctx, app.Tracer, app.QueueOutput, sqsMessage)
 
 	//
 	// send to HTTP
@@ -193,7 +193,7 @@ func sqsHandle(app *SqsApplication, sqsMessage types.Message) {
 
 // SqsSend only submits message to SQS.
 // attribute with traceID must have been set in sqsMessage.
-func SqsSend(ctx context.Context, tracer trace.Tracer, queueURL string, sqsClient *sqs.Client, sqsMessage types.Message) {
+func SqsSend(ctx context.Context, tracer trace.Tracer, queue SqsQueue, sqsMessage types.Message) {
 
 	const me = "SqsSend"
 
@@ -201,13 +201,13 @@ func SqsSend(ctx context.Context, tracer trace.Tracer, queueURL string, sqsClien
 	defer span.End()
 
 	input := &sqs.SendMessageInput{
-		QueueUrl:          aws.String(queueURL),
+		QueueUrl:          aws.String(queue.URL),
 		DelaySeconds:      0, // 0..900
 		MessageAttributes: sqsMessage.MessageAttributes,
 		MessageBody:       sqsMessage.Body,
 	}
 
-	_, errSend := sqsClient.SendMessage(newCtx, input)
+	_, errSend := queue.SqsClient.SendMessage(newCtx, input)
 	if errSend != nil {
 		m := fmt.Sprintf("%s: MessageId: %s - SendMessage: error: %v",
 			me, *sqsMessage.MessageId, errSend)

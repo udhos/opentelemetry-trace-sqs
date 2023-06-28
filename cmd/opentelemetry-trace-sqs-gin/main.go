@@ -153,7 +153,7 @@ func handlerRoute(c *gin.Context, app *application) {
 	// send to SQS
 	//
 
-	backend.SqsSend(ctx, app.tracer, app.config.QueueURLOutput, app.queueOutput.SqsClient, msg)
+	backend.SqsSend(ctx, app.tracer, app.queueOutput, msg)
 
 	//
 	// send to HTTP
