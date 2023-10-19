@@ -56,13 +56,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
-var sqsPropagator = b3.New() // b3 single header
+var defaultSqsPropagator = b3.New() // b3 single header
 
 // SetTextMapPropagator optionally replaces the default propagator (B3 with single header).
 // Please notice that SQS only supports up to 10 attributes, then be careful when picking
 // another propagator that might consume multiple attributes.
 func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
-	sqsPropagator = propagator
+	defaultSqsPropagator = propagator
 }
 
 // ContextFromSqsMessageAttributes gets a tracing context from SQS message attributes.
@@ -88,6 +88,7 @@ func InjectIntoSqsMessageAttributes(ctx context.Context, sqsMessage *types.Messa
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SqsCarrierAttributes struct {
 	sqsMessage *types.Message
+	propagator propagation.TextMapPropagator
 }
 
 // NewCarrierAttributes creates a carrier attached to an SQS message.
@@ -101,7 +102,14 @@ func NewCarrierAttributes(sqsMessage *types.Message) *SqsCarrierAttributes {
 
 // NewCarrier creates a carrier for SQS.
 func NewCarrier() *SqsCarrierAttributes {
-	return &SqsCarrierAttributes{}
+	c := &SqsCarrierAttributes{}
+	return c.WithPropagator(defaultSqsPropagator)
+}
+
+// WithPropagator sets propagator for carrier. If unspecified, carrier uses default propagator defined with SetTextMapPropagator.
+func (c *SqsCarrierAttributes) WithPropagator(propagator propagation.TextMapPropagator) *SqsCarrierAttributes {
+	c.propagator = propagator
+	return c
 }
 
 // attach attaches carrier to SQS message.
@@ -114,7 +122,7 @@ func (c *SqsCarrierAttributes) attach(sqsMessage *types.Message) {
 // Use Extract right after receiving an SQS message.
 func (c *SqsCarrierAttributes) Extract(sqsMessage *types.Message) context.Context {
 	c.attach(sqsMessage)
-	return sqsPropagator.Extract(context.Background(), c)
+	return c.propagator.Extract(context.Background(), c)
 }
 
 // Inject inserts tracing from context into the SQS message attributes.
@@ -123,7 +131,7 @@ func (c *SqsCarrierAttributes) Extract(sqsMessage *types.Message) context.Contex
 // Use Inject right before sending out the SQS message.
 func (c *SqsCarrierAttributes) Inject(ctx context.Context, sqsMessage *types.Message) {
 	c.attach(sqsMessage)
-	sqsPropagator.Inject(ctx, c)
+	c.propagator.Inject(ctx, c)
 }
 
 // Get returns the value for the key.

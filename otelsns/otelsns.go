@@ -11,13 +11,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
-var snsPropagator = b3.New() // b3 single header
+var defaultSnsPropagator = b3.New() // b3 single header
 
 // SetTextMapPropagator optionally replaces the default propagator (B3 with single header).
 // Please notice that SNS only supports up to 10 attributes, then be careful when picking
 // another propagator that might consume multiple attributes.
 func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
-	snsPropagator = propagator
+	defaultSnsPropagator = propagator
 }
 
 // InjectIntoSnsMessageAttributes inserts tracing from context into the SNS message attributes.
@@ -30,7 +30,8 @@ func InjectIntoSnsMessageAttributes(ctx context.Context, input *sns.PublishInput
 // SnsCarrierAttributes is a message attribute carrier for SNS.
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SnsCarrierAttributes struct {
-	input *sns.PublishInput
+	input      *sns.PublishInput
+	propagator propagation.TextMapPropagator
 }
 
 // NewCarrierAttributes creates a carrier attached to an SNS input.
@@ -44,7 +45,14 @@ func NewCarrierAttributes(input *sns.PublishInput) *SnsCarrierAttributes {
 
 // NewCarrier creates a carrier for SNS.
 func NewCarrier() *SnsCarrierAttributes {
-	return &SnsCarrierAttributes{}
+	c := &SnsCarrierAttributes{}
+	return c.WithPropagator(defaultSnsPropagator)
+}
+
+// WithPropagator sets propagator for carrier. If unspecified, carrier uses default propagator defined with SetTextMapPropagator.
+func (c *SnsCarrierAttributes) WithPropagator(propagator propagation.TextMapPropagator) *SnsCarrierAttributes {
+	c.propagator = propagator
+	return c
 }
 
 // attach attaches carrier to SNS input.
@@ -55,7 +63,7 @@ func (c *SnsCarrierAttributes) attach(input *sns.PublishInput) {
 // Inject inserts tracing from context into the SNS message attributes.
 func (c *SnsCarrierAttributes) Inject(ctx context.Context, input *sns.PublishInput) {
 	c.attach(input)
-	snsPropagator.Inject(ctx, c)
+	c.propagator.Inject(ctx, c)
 }
 
 // Get returns the value for the key.
