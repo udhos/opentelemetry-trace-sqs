@@ -165,7 +165,7 @@ func handlerRoute(app *application, w http.ResponseWriter, r *http.Request) {
 		Body: &str,
 	}
 
-	otelsqs.InjectIntoSqsMessageAttributes(ctx, &msg)
+	otelsqs.NewCarrier().Inject(ctx, &msg)
 
 	//
 	// send to SQS

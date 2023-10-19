@@ -94,6 +94,8 @@ func SqsListener(app *SqsApplication) {
 		WaitTimeSeconds: 20, // 0..20
 	}
 
+	carrier := otelsqs.NewCarrier()
+
 	for {
 		if debug {
 			log.Printf("%s: ready: %s", me, q.URL)
@@ -140,7 +142,7 @@ func SqsListener(app *SqsApplication) {
 				log.Printf("%s: %d/%d MessageId: %s", me, i+1, count, *msg.MessageId)
 			}
 
-			sqsHandle(app, msg)
+			sqsHandle(app, carrier, msg)
 
 			//
 			// delete from source queue
@@ -164,11 +166,11 @@ func SqsListener(app *SqsApplication) {
 // sqsHandle forwards SQS message to both SQS and HTTP.
 // will retrieve traceID from sqsMessage,
 // and create a context with traceID for HTTP.
-func sqsHandle(app *SqsApplication, sqsMessage types.Message) {
+func sqsHandle(app *SqsApplication, carrier *otelsqs.SqsCarrierAttributes, sqsMessage types.Message) {
 
 	const me = "sqsHandle"
 
-	ctx := otelsqs.ContextFromSqsMessageAttributes(&sqsMessage)
+	ctx := carrier.Extract(&sqsMessage)
 
 	ctxNew, span := app.Tracer.Start(ctx, me)
 	defer span.End()
@@ -210,7 +212,7 @@ func SqsSend(ctx context.Context, tracer trace.Tracer, queue SqsQueue, sqsMessag
 	_, errSend := queue.SqsClient.SendMessage(newCtx, input)
 	if errSend != nil {
 		m := fmt.Sprintf("%s: MessageId: %s - SendMessage: error: %v",
-			me, *sqsMessage.MessageId, errSend)
+			me, aws.ToString(sqsMessage.MessageId), errSend)
 		log.Print(m)
 		span.SetStatus(codes.Error, m)
 	}

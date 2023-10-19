@@ -14,7 +14,7 @@ https://github.com/openzipkin/b3-propagation
 
 ## Extract trace from SQS received message
 
-Use `otelsqs.ContextFromSqsMessageAttributes()` to extract trace context from SQS message.
+Use `SqsCarrierAttributes.Extract()` to extract trace context from SQS message.
 
 ```go
 import (
@@ -22,11 +22,11 @@ import (
     "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
-// handleSQSMessage is an example function that uses ContextFromSqsMessageAttributes to
+// handleSQSMessage is an example function that uses SqsCarrierAttributes.Extract to
 // extract tracing context from inbound SQS message.
 func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
     // Extract the tracing context from a received SQS message
-    ctx := otelsqs.ContextFromSqsMessageAttributes(&inboundSqsMessage)
+    ctx := otelsqs.NewCarrier().Extract(&inboundSqsMessage)
 
     // Use the trace context as usual, for instance, starting a new span
     ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
@@ -40,7 +40,7 @@ func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
 
 ## Inject trace context into SQS message before sending
 
-Use `otelsqs.InjectIntoSqsMessageAttributes()` to inject trace context into SQS message before sending it.
+Use `SqsCarrierAttributes.Inject()` to inject trace context into SQS message before sending it.
 
 ```go
 import (
@@ -48,7 +48,7 @@ import (
     "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 )
 
-// sendSQSMessage is an example function that uses InjectIntoSqsMessageAttributes to
+// sendSQSMessage is an example function that uses SqsCarrierAttributes.Inject to
 // propagate tracing context into outgoing SQS message.
 // 'ctx' holds current tracing context.
 func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage types.Message) {
@@ -57,7 +57,7 @@ func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage ty
     defer span.End()
 
     // Inject the tracing context
-    otelsqs.InjectIntoSqsMessageAttributes(ctxNew, &outboundSqsMessage)
+    otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
 
     // Now you can send the SQS message
 ```
@@ -143,7 +143,7 @@ opentelemetry-trace-sqs-gin
 
 # Server 3
 export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q3
-export QUEUE_URL_INPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q4
+export QUEUE_URL_OUTPUT=https://sqs.us-east-1.amazonaws.com/100010001000/q4
 export OTEL_SERVICE_NAME=opentelemetry-trace-sqs-gin-3
 export HTTP_ADDR=:8003
 export BACKEND_URL=http://wrong:8002/send
@@ -151,3 +151,7 @@ opentelemetry-trace-sqs-gin
 
 curl -d '{"a":"b"}' localhost:8001/send
 ```
+
+# Open Issue
+
+https://github.com/open-telemetry/opentelemetry-go-contrib/issues/1613

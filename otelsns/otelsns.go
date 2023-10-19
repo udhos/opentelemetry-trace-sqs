@@ -21,9 +21,10 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 }
 
 // InjectIntoSnsMessageAttributes inserts tracing from context into the SNS message attributes.
+//
+// Deprecated: Use c := NewCarrier() followed by c.Inject()
 func InjectIntoSnsMessageAttributes(ctx context.Context, input *sns.PublishInput) {
-	carrier := NewCarrierAttributes(input)
-	snsPropagator.Inject(ctx, carrier)
+	NewCarrier().Inject(ctx, input)
 }
 
 // SnsCarrierAttributes is a message attribute carrier for SNS.
@@ -32,11 +33,29 @@ type SnsCarrierAttributes struct {
 	input *sns.PublishInput
 }
 
-// NewCarrierAttributes creates a carrier for SNS.
+// NewCarrierAttributes creates a carrier attached to an SNS input.
+//
+// Deprecated: Use c := NewCarrier()
 func NewCarrierAttributes(input *sns.PublishInput) *SnsCarrierAttributes {
-	return &SnsCarrierAttributes{
-		input: input,
-	}
+	c := NewCarrier()
+	c.attach(input)
+	return c
+}
+
+// NewCarrier creates a carrier for SNS.
+func NewCarrier() *SnsCarrierAttributes {
+	return &SnsCarrierAttributes{}
+}
+
+// attach attaches carrier to SNS input.
+func (c *SnsCarrierAttributes) attach(input *sns.PublishInput) {
+	c.input = input
+}
+
+// Inject inserts tracing from context into the SNS message attributes.
+func (c *SnsCarrierAttributes) Inject(ctx context.Context, input *sns.PublishInput) {
+	c.attach(input)
+	snsPropagator.Inject(ctx, c)
 }
 
 // Get returns the value for the key.
