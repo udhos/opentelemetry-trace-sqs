@@ -64,7 +64,7 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 
 ```go
 import (
-	"github.com/aws/aws-sdk-go-v2/service/sns"
+    "github.com/aws/aws-sdk-go-v2/service/sns"
     "github.com/udhos/opentelemetry-trace-sqs/otelsns"
 )
 
@@ -72,11 +72,11 @@ import (
 // propagate tracing context with SNS publishing.
 // 'ctx' holds current tracing context.
 func publish(ctx context.Context, topicArn, msg string) {
-	input := &sns.PublishInput{
-		TopicArn: aws.String(topicArn),
-		Message:  aws.String(msg),
-	}
-	otelsns.NewCarrier().Inject(ctx, &input)
+    input := &sns.PublishInput{
+        TopicArn: aws.String(topicArn),
+        Message:  aws.String(msg),
+    }
+    otelsns.NewCarrier().Inject(ctx, &input)
 
     // Now invoke SNS publish for input
 ```

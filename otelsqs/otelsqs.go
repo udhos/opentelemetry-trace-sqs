@@ -6,44 +6,44 @@ Package otelsqs implements carrier for SQS.
 Use `SqsCarrierAttributes.Extract()` to extract trace context from SQS message.
 
 	import (
-		"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
+	    "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	    "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 	)
 
 	// handleSQSMessage is an example function that uses SqsCarrierAttributes.Extract to
 	// extract tracing context from inbound SQS message.
 	func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
-		// Extract the tracing context from a received SQS message
-		ctx := otelsqs.NewCarrier().Extract(&inboundSqsMessage)
+	    // Extract the tracing context from a received SQS message
+	    ctx := otelsqs.NewCarrier().Extract(&inboundSqsMessage)
 
-		// Use the trace context as usual, for instance, starting a new span
-		ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
-		defer span.End()
+	    // Use the trace context as usual, for instance, starting a new span
+	    ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
+	    defer span.End()
 
-		// One could log the traceID
-		log.Printf("handleSQSMessage: traceID=%s", span.SpanContext().TraceID().String())
+	    // One could log the traceID
+	    log.Printf("handleSQSMessage: traceID=%s", span.SpanContext().TraceID().String())
 
-		// Now handle the SQS message
+	    // Now handle the SQS message
 
 Use `SqsCarrierAttributes.Inject()` to inject trace context into SQS message before sending it.
 
 	import (
-		"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-		"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
+	    "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	    "github.com/udhos/opentelemetry-trace-sqs/otelsqs"
 	)
 
 	// sendSQSMessage is an example function that uses SqsCarrierAttributes.Inject to
 	// propagate tracing context into outgoing SQS message.
 	// 'ctx' holds current tracing context.
 	func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage types.Message) {
-		// You have a trace context in 'ctx' that you need to propagate into SQS message 'outboundSqsMessage'
-		ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
-		defer span.End()
+	    // You have a trace context in 'ctx' that you need to propagate into SQS message 'outboundSqsMessage'
+	    ctxNew, span := app.tracer.Start(ctx, "sendSQSMessage")
+	    defer span.End()
 
-		// Inject the tracing context
-		otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
+	    // Inject the tracing context
+	    otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
 
-		// Now you can send the SQS message
+	    // Now you can send the SQS message
 */
 package otelsqs
 
