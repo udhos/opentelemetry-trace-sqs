@@ -18,7 +18,9 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 	        TopicArn: aws.String(topicArn),
 	        Message:  aws.String(msg),
 	    }
-	    otelsns.NewCarrier().Inject(ctx, &input)
+
+	    // Inject the tracing context
+	    otelsns.NewCarrier().Inject(ctx, input)
 
 	    // Now invoke SNS publish for input
 */

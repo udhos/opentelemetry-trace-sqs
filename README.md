@@ -76,7 +76,9 @@ func publish(ctx context.Context, topicArn, msg string) {
         TopicArn: aws.String(topicArn),
         Message:  aws.String(msg),
     }
-    otelsns.NewCarrier().Inject(ctx, &input)
+
+    // Inject the tracing context
+    otelsns.NewCarrier().Inject(ctx, input)
 
     // Now invoke SNS publish for input
 ```
