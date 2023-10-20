@@ -1,4 +1,27 @@
-// Package otelsns implements carrier for SNS.
+/*
+Package otelsns implements carrier for SNS.
+
+# Usage
+
+Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
+
+	import (
+	    "github.com/aws/aws-sdk-go-v2/service/sns"
+	    "github.com/udhos/opentelemetry-trace-sqs/otelsns"
+	)
+
+	// publish is an example function that uses SnsCarrierAttributes.Inject to
+	// propagate tracing context with SNS publishing.
+	// 'ctx' holds current tracing context.
+	func publish(ctx context.Context, topicArn, msg string) {
+	    input := &sns.PublishInput{
+	        TopicArn: aws.String(topicArn),
+	        Message:  aws.String(msg),
+	    }
+	    otelsns.NewCarrier().Inject(ctx, &input)
+
+	    // Now invoke SNS publish for input
+*/
 package otelsns
 
 import (

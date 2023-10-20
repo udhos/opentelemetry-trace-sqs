@@ -4,11 +4,7 @@
 
 # opentelemetry-trace-sqs
 
-[opentelemetry-trace-sqs](https://github.com/udhos/opentelemetry-trace-sqs) propagates Open Telemetry tracing with SQS messages.
-
-# B3 Propagation
-
-https://github.com/openzipkin/b3-propagation
+[opentelemetry-trace-sqs](https://github.com/udhos/opentelemetry-trace-sqs) propagates Open Telemetry tracing with SQS messages for the Go language. Injecting with SNS Publish is also supported since SNS-to-SQS fanout is a common case.
 
 # Tracing propagation with SQS
 
@@ -60,6 +56,29 @@ func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage ty
     otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
 
     // Now you can send the SQS message
+```
+
+# Inject with SNS Publish
+
+Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
+
+```go
+import (
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+    "github.com/udhos/opentelemetry-trace-sqs/otelsns"
+)
+
+// publish is an example function that uses SnsCarrierAttributes.Inject to
+// propagate tracing context with SNS publishing.
+// 'ctx' holds current tracing context.
+func publish(ctx context.Context, topicArn, msg string) {
+	input := &sns.PublishInput{
+		TopicArn: aws.String(topicArn),
+		Message:  aws.String(msg),
+	}
+	otelsns.NewCarrier().Inject(ctx, &input)
+
+    // Now invoke SNS publish for input
 ```
 
 # Open Telemetry tracing recipe for GIN and HTTP
@@ -152,6 +171,20 @@ opentelemetry-trace-sqs-gin
 curl -d '{"a":"b"}' localhost:8001/send
 ```
 
-# Open Issue
+# References
 
-https://github.com/open-telemetry/opentelemetry-go-contrib/issues/1613
+## Open Issue
+
+[Instrumentation for SNS/SQS](https://github.com/open-telemetry/opentelemetry-go-contrib/issues/1613)
+
+## OpenTelemetry Go Contrib Instrumentation
+
+https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation
+
+## OpenTelemetry Registry
+
+https://opentelemetry.io/ecosystem/registry/
+
+## B3 Propagation
+
+https://github.com/openzipkin/b3-propagation
