@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/aws/aws-sdk-go-v2/service/sns/types"
 	sqs_types "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -68,21 +69,24 @@ func TestSnSInjectExtract(t *testing.T) {
 
 	info := "hello"
 	input := sns.PublishInput{
-		Message: aws.String(info),
+		Message:           aws.String(info),
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
 	carrier := NewCarrier()
-	carrier.Inject(ctx, &input)
+	carrier.Inject(ctx, input.MessageAttributes)
 
 	//
 	// Receive
 	//
 
-	msg := sqs_types.Message{}
+	msg := sqs_types.Message{
+		MessageAttributes: make(map[string]sqs_types.MessageAttributeValue),
+	}
 
 	copyAttributes(&input, &msg)
 
 	carrierSQS := otelsqs.NewCarrier()
-	ctxNew := carrierSQS.Extract(&msg)
+	ctxNew := carrierSQS.Extract(msg.MessageAttributes)
 
 	_, span2 := tracer.Start(ctxNew, me)
 	defer span2.End()
@@ -109,7 +113,9 @@ func copyAttributes(from *sns.PublishInput, to *sqs_types.Message) {
 }
 
 func TestSqsCarrierAttributes(t *testing.T) {
-	input := sns.PublishInput{}
+	input := sns.PublishInput{
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
+	}
 	carrier := NewCarrierAttributes(&input)
 
 	// no keys

@@ -22,7 +22,7 @@ import (
 // extract tracing context from inbound SQS message.
 func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
     // Extract the tracing context from a received SQS message
-    ctx := otelsqs.NewCarrier().Extract(&inboundSqsMessage)
+    ctx := otelsqs.NewCarrier().Extract(inboundSqsMessage.MessageAttributes)
 
     // Use the trace context as usual, for instance, starting a new span
     ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
@@ -53,7 +53,7 @@ func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage ty
     defer span.End()
 
     // Inject the tracing context
-    otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
+    otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes)
 
     // Now you can send the SQS message
 ```
@@ -65,6 +65,7 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 ```go
 import (
     "github.com/aws/aws-sdk-go-v2/service/sns"
+    "github.com/aws/aws-sdk-go-v2/service/sns/types"
     "github.com/udhos/opentelemetry-trace-sqs/otelsns"
 )
 
@@ -73,12 +74,13 @@ import (
 // 'ctx' holds current tracing context.
 func publish(ctx context.Context, topicArn, msg string) {
     input := &sns.PublishInput{
-        TopicArn: aws.String(topicArn),
-        Message:  aws.String(msg),
+        TopicArn:          aws.String(topicArn),
+        Message:           aws.String(msg),
+        MessageAttributes: make(map[string]types.MessageAttributeValue),
     }
 
     // Inject the tracing context
-    otelsns.NewCarrier().Inject(ctx, input)
+    otelsns.NewCarrier().Inject(ctx, input.MessageAttributes)
 
     // Now invoke SNS publish for input
 ```

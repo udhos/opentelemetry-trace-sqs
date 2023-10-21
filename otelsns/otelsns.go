@@ -7,6 +7,7 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 
 	import (
 	    "github.com/aws/aws-sdk-go-v2/service/sns"
+	    "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	    "github.com/udhos/opentelemetry-trace-sqs/otelsns"
 	)
 
@@ -15,12 +16,13 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 	// 'ctx' holds current tracing context.
 	func publish(ctx context.Context, topicArn, msg string) {
 	    input := &sns.PublishInput{
-	        TopicArn: aws.String(topicArn),
-	        Message:  aws.String(msg),
+	        TopicArn:          aws.String(topicArn),
+	        Message:           aws.String(msg),
+	        MessageAttributes: make(map[string]types.MessageAttributeValue),
 	    }
 
 	    // Inject the tracing context
-	    otelsns.NewCarrier().Inject(ctx, input)
+	    otelsns.NewCarrier().Inject(ctx, input.MessageAttributes)
 
 	    // Now invoke SNS publish for input
 */
@@ -49,14 +51,14 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 //
 // Deprecated: Use c := NewCarrier() followed by c.Inject()
 func InjectIntoSnsMessageAttributes(ctx context.Context, input *sns.PublishInput) {
-	NewCarrier().Inject(ctx, input)
+	NewCarrier().Inject(ctx, input.MessageAttributes)
 }
 
 // SnsCarrierAttributes is a message attribute carrier for SNS.
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SnsCarrierAttributes struct {
-	input      *sns.PublishInput
-	propagator propagation.TextMapPropagator
+	messageAttributes map[string]types.MessageAttributeValue
+	propagator        propagation.TextMapPropagator
 }
 
 // NewCarrierAttributes creates a carrier attached to an SNS input.
@@ -64,7 +66,7 @@ type SnsCarrierAttributes struct {
 // Deprecated: Use c := NewCarrier()
 func NewCarrierAttributes(input *sns.PublishInput) *SnsCarrierAttributes {
 	c := NewCarrier()
-	c.attach(input)
+	c.attach(input.MessageAttributes)
 	return c
 }
 
@@ -81,19 +83,29 @@ func (c *SnsCarrierAttributes) WithPropagator(propagator propagation.TextMapProp
 }
 
 // attach attaches carrier to SNS input.
-func (c *SnsCarrierAttributes) attach(input *sns.PublishInput) {
-	c.input = input
+func (c *SnsCarrierAttributes) attach(messageAttributes map[string]types.MessageAttributeValue) {
+	if messageAttributes == nil {
+		panic("messageAttributes map is nil")
+	}
+	c.messageAttributes = messageAttributes
 }
 
 // Inject inserts tracing from context into the SNS message attributes.
-func (c *SnsCarrierAttributes) Inject(ctx context.Context, input *sns.PublishInput) {
-	c.attach(input)
+// `ctx` holds current context with trace information.
+// `messageAttributes` should point to outgoing SNS publish MessageAttributes which will carry the trace information.
+// `messageAttributes` must not be nil.
+// Use Inject right before publishing out to SNS.
+func (c *SnsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
+	if messageAttributes == nil {
+		return
+	}
+	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
 }
 
 // Get returns the value for the key.
 func (c *SnsCarrierAttributes) Get(key string) string {
-	attr, found := c.input.MessageAttributes[key]
+	attr, found := c.messageAttributes[key]
 	if !found {
 		return ""
 	}
@@ -107,10 +119,7 @@ const stringType = "String"
 
 // Set stores a key-value pair.
 func (c *SnsCarrierAttributes) Set(key, value string) {
-	if c.input.MessageAttributes == nil {
-		c.input.MessageAttributes = map[string]types.MessageAttributeValue{}
-	}
-	c.input.MessageAttributes[key] = types.MessageAttributeValue{
+	c.messageAttributes[key] = types.MessageAttributeValue{
 		DataType:    aws.String(stringType),
 		StringValue: aws.String(value),
 	}
@@ -118,11 +127,8 @@ func (c *SnsCarrierAttributes) Set(key, value string) {
 
 // Keys lists the keys in the carrier.
 func (c *SnsCarrierAttributes) Keys() []string {
-	if c.input.MessageAttributes == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(c.input.MessageAttributes))
-	for k := range c.input.MessageAttributes {
+	keys := make([]string, 0, len(c.messageAttributes))
+	for k := range c.messageAttributes {
 		keys = append(keys, k)
 	}
 	return keys

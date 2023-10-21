@@ -14,7 +14,7 @@ Use `SqsCarrierAttributes.Extract()` to extract trace context from SQS message.
 	// extract tracing context from inbound SQS message.
 	func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
 	    // Extract the tracing context from a received SQS message
-	    ctx := otelsqs.NewCarrier().Extract(&inboundSqsMessage)
+	    ctx := otelsqs.NewCarrier().Extract(inboundSqsMessage.MessageAttributes)
 
 	    // Use the trace context as usual, for instance, starting a new span
 	    ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
@@ -41,7 +41,7 @@ Use `SqsCarrierAttributes.Inject()` to inject trace context into SQS message bef
 	    defer span.End()
 
 	    // Inject the tracing context
-	    otelsqs.NewCarrier().Inject(ctxNew, &outboundSqsMessage)
+	    otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes)
 
 	    // Now you can send the SQS message
 */
@@ -69,9 +69,9 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 // `sqsMessage` is incoming, received SQS message (possibly) carring trace information in the message attributes.
 // Use ContextFromSqsMessageAttributes right after receiving an SQS message.
 //
-// Deprecated: Use c := NewCarrier() followed by c.Extract()
+// Deprecated: Use c := NewCarrier() followed by c.Extract().
 func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context {
-	return NewCarrier().Extract(sqsMessage)
+	return NewCarrier().Extract(sqsMessage.MessageAttributes)
 }
 
 // InjectIntoSqsMessageAttributes inserts tracing from context into the SQS message attributes.
@@ -79,24 +79,24 @@ func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context 
 // `sqsMessage` is outgoing SQS message that will be set to carry trace information.
 // Use InjectIntoSqsMessageAttributes right before sending out the SQS message.
 //
-// Deprecated: Use c := NewCarrier() followed by c.Inject()
+// Deprecated: Use c := NewCarrier() followed by c.Inject().
 func InjectIntoSqsMessageAttributes(ctx context.Context, sqsMessage *types.Message) {
-	NewCarrier().Inject(ctx, sqsMessage)
+	NewCarrier().Inject(ctx, sqsMessage.MessageAttributes)
 }
 
 // SqsCarrierAttributes is a message attribute carrier for SQS.
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SqsCarrierAttributes struct {
-	sqsMessage *types.Message
-	propagator propagation.TextMapPropagator
+	messageAttributes map[string]types.MessageAttributeValue
+	propagator        propagation.TextMapPropagator
 }
 
 // NewCarrierAttributes creates a carrier attached to an SQS message.
 //
-// Deprecated: Use c := NewCarrier()
+// Deprecated: Use NewCarrier().
 func NewCarrierAttributes(sqsMessage *types.Message) *SqsCarrierAttributes {
 	c := NewCarrier()
-	c.attach(sqsMessage)
+	c.attach(sqsMessage.MessageAttributes)
 	return c
 }
 
@@ -113,30 +113,39 @@ func (c *SqsCarrierAttributes) WithPropagator(propagator propagation.TextMapProp
 }
 
 // attach attaches carrier to SQS message.
-func (c *SqsCarrierAttributes) attach(sqsMessage *types.Message) {
-	c.sqsMessage = sqsMessage
+func (c *SqsCarrierAttributes) attach(messageAttributes map[string]types.MessageAttributeValue) {
+	if messageAttributes == nil {
+		panic("messageAttributes map is nil")
+	}
+	c.messageAttributes = messageAttributes
 }
 
 // Extract gets a tracing context from SQS message attributes.
-// `sqsMessage` is incoming, received SQS message (possibly) carring trace information in the message attributes.
+// `messageAttributes` should point to incoming SQS message MessageAttributes (possibly) carring trace information.
+// If `messageAttributes` is nil, a blank new empty context is returned.
 // Use Extract right after receiving an SQS message.
-func (c *SqsCarrierAttributes) Extract(sqsMessage *types.Message) context.Context {
-	c.attach(sqsMessage)
-	return c.propagator.Extract(context.Background(), c)
+func (c *SqsCarrierAttributes) Extract(messageAttributes map[string]types.MessageAttributeValue) context.Context {
+	ctx := context.Background()
+	if messageAttributes == nil {
+		return ctx
+	}
+	c.attach(messageAttributes)
+	return c.propagator.Extract(ctx, c)
 }
 
 // Inject inserts tracing from context into the SQS message attributes.
 // `ctx` holds current context with trace information.
-// `sqsMessage` is outgoing SQS message that will be set to carry trace information.
+// `messageAttributes` should point to outgoing SQS message MessageAttributes which will carry the trace information.
+// `messageAttributes` must not be nil.
 // Use Inject right before sending out the SQS message.
-func (c *SqsCarrierAttributes) Inject(ctx context.Context, sqsMessage *types.Message) {
-	c.attach(sqsMessage)
+func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
+	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
 }
 
 // Get returns the value for the key.
 func (c *SqsCarrierAttributes) Get(key string) string {
-	attr, found := c.sqsMessage.MessageAttributes[key]
+	attr, found := c.messageAttributes[key]
 	if !found {
 		return ""
 	}
@@ -150,10 +159,7 @@ const stringType = "String"
 
 // Set stores a key-value pair.
 func (c *SqsCarrierAttributes) Set(key, value string) {
-	if c.sqsMessage.MessageAttributes == nil {
-		c.sqsMessage.MessageAttributes = map[string]types.MessageAttributeValue{}
-	}
-	c.sqsMessage.MessageAttributes[key] = types.MessageAttributeValue{
+	c.messageAttributes[key] = types.MessageAttributeValue{
 		DataType:    aws.String(stringType),
 		StringValue: aws.String(value),
 	}
@@ -161,11 +167,8 @@ func (c *SqsCarrierAttributes) Set(key, value string) {
 
 // Keys lists the keys in the carrier.
 func (c *SqsCarrierAttributes) Keys() []string {
-	if c.sqsMessage.MessageAttributes == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(c.sqsMessage.MessageAttributes))
-	for k := range c.sqsMessage.MessageAttributes {
+	keys := make([]string, 0, len(c.messageAttributes))
+	for k := range c.messageAttributes {
 		keys = append(keys, k)
 	}
 	return keys

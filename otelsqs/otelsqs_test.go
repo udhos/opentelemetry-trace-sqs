@@ -66,16 +66,17 @@ func TestSqsInjectExtract(t *testing.T) {
 
 	info := "hello"
 	msg := types.Message{
-		Body: aws.String(info),
+		Body:              aws.String(info),
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
 	carrier := NewCarrier()
-	carrier.Inject(ctx, &msg)
+	carrier.Inject(ctx, msg.MessageAttributes)
 
 	//
 	// Receive
 	//
 
-	ctxNew := carrier.Extract(&msg)
+	ctxNew := carrier.Extract(msg.MessageAttributes)
 
 	_, span2 := tracer.Start(ctxNew, me)
 	defer span2.End()
@@ -90,7 +91,9 @@ func TestSqsInjectExtract(t *testing.T) {
 }
 
 func TestSqsCarrierAttributes(t *testing.T) {
-	sqsMessage := types.Message{}
+	sqsMessage := types.Message{
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
+	}
 	carrier := NewCarrierAttributes(&sqsMessage)
 
 	// no keys

@@ -162,10 +162,11 @@ func handlerRoute(app *application, w http.ResponseWriter, r *http.Request) {
 	str := string(buf)
 
 	msg := types.Message{
-		Body: &str,
+		Body:              &str,
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
 
-	otelsqs.NewCarrier().Inject(ctx, &msg)
+	otelsqs.NewCarrier().Inject(ctx, msg.MessageAttributes)
 
 	//
 	// send to SQS

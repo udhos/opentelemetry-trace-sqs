@@ -144,10 +144,11 @@ func handlerRoute(c *gin.Context, app *application) {
 	str := string(buf)
 
 	msg := types.Message{
-		Body: &str,
+		Body:              &str,
+		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
 
-	otelsqs.NewCarrier().Inject(ctx, &msg)
+	otelsqs.NewCarrier().Inject(ctx, msg.MessageAttributes)
 
 	//
 	// send to SQS
