@@ -56,6 +56,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
+const sqsMessageAttributeLimit = 10
+
 var defaultSqsPropagator = b3.New() // b3 single header
 
 // SetTextMapPropagator optionally replaces the default propagator (B3 with single header).
@@ -137,8 +139,12 @@ func (c *SqsCarrierAttributes) Extract(messageAttributes map[string]types.Messag
 // `ctx` holds current context with trace information.
 // `messageAttributes` should point to outgoing SQS message MessageAttributes which will carry the trace information.
 // `messageAttributes` must not be nil.
+// If `messageAttributes` holds 10 or more items, Inject will do nothing, since SQS refuses messages with more than 10 attributes.
 // Use Inject right before sending out the SQS message.
 func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
+	if len(messageAttributes) >= sqsMessageAttributeLimit {
+		return
+	}
 	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
 }
