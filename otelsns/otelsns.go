@@ -96,9 +96,6 @@ func (c *SnsCarrierAttributes) attach(messageAttributes map[string]types.Message
 // `messageAttributes` must not be nil.
 // Use Inject right before publishing out to SNS.
 func (c *SnsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
-	if messageAttributes == nil {
-		return
-	}
 	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
 }
