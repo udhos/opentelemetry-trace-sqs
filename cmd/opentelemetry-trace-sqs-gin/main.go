@@ -3,26 +3,23 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/udhos/opentelemetry-trace-sqs/internal/backend"
 	"github.com/udhos/opentelemetry-trace-sqs/internal/config"
-	"github.com/udhos/opentelemetry-trace-sqs/internal/tracing"
 	"github.com/udhos/opentelemetry-trace-sqs/otelsqs"
+	"github.com/udhos/otelconfig/oteltrace"
 )
 
 type application struct {
@@ -59,31 +56,21 @@ func main() {
 	//
 
 	{
-		tp, errTracer := tracing.TracerProvider(app.me, app.config.JaegerURL)
-		if errTracer != nil {
-			log.Fatalf("tracer provider: %v", errTracer)
+		options := oteltrace.TraceOptions{
+			DefaultService:     app.me,
+			NoopTracerProvider: false,
+			Debug:              true,
 		}
 
-		// Register our TracerProvider as the global so any imported
-		// instrumentation in the future will default to using it.
-		otel.SetTracerProvider(tp)
+		tr, cancel, errTracer := oteltrace.TraceStart(options)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		if errTracer != nil {
+			log.Fatalf("tracer: %v", errTracer)
+		}
+
 		defer cancel()
 
-		// Cleanly shutdown and flush telemetry when the application exits.
-		defer func(ctx context.Context) {
-			// Do not make the application hang when it is shutdown.
-			ctx, cancel = context.WithTimeout(ctx, time.Second*5)
-			defer cancel()
-			if err := tp.Shutdown(ctx); err != nil {
-				log.Fatalf("trace shutdown: %v", err)
-			}
-		}(ctx)
-
-		tracing.TracePropagation()
-
-		app.tracer = tp.Tracer(fmt.Sprintf("%s-main", app.me))
+		app.tracer = tr
 	}
 
 	//

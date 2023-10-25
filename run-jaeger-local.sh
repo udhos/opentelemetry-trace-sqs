@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# https://www.jaegertracing.io/docs/1.44/getting-started/
+# https://www.jaegertracing.io/docs/1.50/getting-started/
 
 echo open http://localhost:16686
 
 docker run --rm --name jaeger \
   -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
-  -e COLLECTOR_OTLP_ENABLED=true \
   -p 6831:6831/udp \
   -p 6832:6832/udp \
   -p 5778:5778 \
@@ -17,4 +16,4 @@ docker run --rm --name jaeger \
   -p 14268:14268 \
   -p 14269:14269 \
   -p 9411:9411 \
-  jaegertracing/all-in-one:1.44
+  jaegertracing/all-in-one:1.50
