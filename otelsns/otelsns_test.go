@@ -71,7 +71,7 @@ func TestSnSInjectExtract(t *testing.T) {
 	copyAttributes(&input, &msg)
 
 	carrierSQS := otelsqs.NewCarrier()
-	ctxNew := carrierSQS.Extract(msg.MessageAttributes)
+	ctxNew := carrierSQS.Extract(ctx, msg.MessageAttributes)
 
 	_, span2 := tracer.Start(ctxNew, me)
 	defer span2.End()

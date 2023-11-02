@@ -60,7 +60,7 @@ func TestSqsInjectExtract(t *testing.T) {
 	// Receive
 	//
 
-	ctxNew := carrier.Extract(msg.MessageAttributes)
+	ctxNew := carrier.Extract(ctx, msg.MessageAttributes)
 
 	_, span2 := tracer.Start(ctxNew, me)
 	defer span2.End()

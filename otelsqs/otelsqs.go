@@ -14,7 +14,7 @@ Use `SqsCarrierAttributes.Extract()` to extract trace context from SQS message.
 	// extract tracing context from inbound SQS message.
 	func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
 	    // Extract the tracing context from a received SQS message
-	    ctx := otelsqs.NewCarrier().Extract(inboundSqsMessage.MessageAttributes)
+	    ctx := otelsqs.NewCarrier().Extract(context.Background(), inboundSqsMessage.MessageAttributes)
 
 	    // Use the trace context as usual, for instance, starting a new span
 	    ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
@@ -73,7 +73,7 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 //
 // Deprecated: Use c := NewCarrier() followed by c.Extract().
 func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context {
-	return NewCarrier().Extract(sqsMessage.MessageAttributes)
+	return NewCarrier().Extract(context.Background(), sqsMessage.MessageAttributes)
 }
 
 // InjectIntoSqsMessageAttributes inserts tracing from context into the SQS message attributes.
@@ -124,10 +124,9 @@ func (c *SqsCarrierAttributes) attach(messageAttributes map[string]types.Message
 
 // Extract gets a tracing context from SQS message attributes.
 // `messageAttributes` should point to incoming SQS message MessageAttributes (possibly) carring trace information.
-// If `messageAttributes` is nil, a blank new empty context is returned.
+// If `messageAttributes` is nil, ctx is returned unchanged.
 // Use Extract right after receiving an SQS message.
-func (c *SqsCarrierAttributes) Extract(messageAttributes map[string]types.MessageAttributeValue) context.Context {
-	ctx := context.Background()
+func (c *SqsCarrierAttributes) Extract(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) context.Context {
 	if messageAttributes == nil {
 		return ctx
 	}

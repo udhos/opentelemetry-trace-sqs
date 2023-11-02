@@ -170,7 +170,7 @@ func sqsHandle(app *SqsApplication, carrier *otelsqs.SqsCarrierAttributes, sqsMe
 
 	const me = "sqsHandle"
 
-	ctx := carrier.Extract(sqsMessage.MessageAttributes)
+	ctx := carrier.Extract(context.Background(), sqsMessage.MessageAttributes)
 
 	ctxNew, span := app.Tracer.Start(ctx, me)
 	defer span.End()

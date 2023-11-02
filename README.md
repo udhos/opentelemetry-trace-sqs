@@ -22,7 +22,7 @@ import (
 // extract tracing context from inbound SQS message.
 func handleSQSMessage(app *application, inboundSqsMessage types.Message) {
     // Extract the tracing context from a received SQS message
-    ctx := otelsqs.NewCarrier().Extract(inboundSqsMessage.MessageAttributes)
+    ctx := otelsqs.NewCarrier().Extract(context.Background(), inboundSqsMessage.MessageAttributes)
 
     // Use the trace context as usual, for instance, starting a new span
     ctxNew, span := app.tracer.Start(ctx, "handleSQSMessage")
