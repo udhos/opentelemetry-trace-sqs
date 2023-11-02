@@ -49,6 +49,7 @@ package otelsqs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -134,18 +135,22 @@ func (c *SqsCarrierAttributes) Extract(ctx context.Context, messageAttributes ma
 	return c.propagator.Extract(ctx, c)
 }
 
+var ErrMaxAttrLimit = fmt.Errorf("max attribute limit reached") // ErrMaxAttrLimit signals max attribute limit reached.
+
 // Inject inserts tracing from context into the SQS message attributes.
 // `ctx` holds current context with trace information.
 // `messageAttributes` should point to outgoing SQS message MessageAttributes which will carry the trace information.
 // `messageAttributes` must not be nil.
-// If `messageAttributes` holds 10 or more items, Inject will do nothing, since SQS refuses messages with more than 10 attributes.
+// If `messageAttributes` holds 10 or more items, Inject will do nothing and return ErrMaxAttrLimit,
+// since SQS refuses messages with more than 10 attributes.
 // Use Inject right before sending out the SQS message.
-func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
+func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) error {
 	if len(messageAttributes) >= sqsMessageAttributeLimit {
-		return
+		return ErrMaxAttrLimit
 	}
 	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
+	return nil
 }
 
 // Get returns the value for the key.
