@@ -41,7 +41,9 @@ Use `SqsCarrierAttributes.Inject()` to inject trace context into SQS message bef
 	    defer span.End()
 
 	    // Inject the tracing context
-	    otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes)
+	    if errInject := otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes); errInject != nil {
+	        log.Printf("inject error: %v", errInject)
+	    }
 
 	    // Now you can send the SQS message
 */
@@ -49,7 +51,7 @@ package otelsqs
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -68,39 +70,11 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 	defaultSqsPropagator = propagator
 }
 
-// ContextFromSqsMessageAttributes gets a tracing context from SQS message attributes.
-// `sqsMessage` is incoming, received SQS message (possibly) carring trace information in the message attributes.
-// Use ContextFromSqsMessageAttributes right after receiving an SQS message.
-//
-// Deprecated: Use c := NewCarrier() followed by c.Extract().
-func ContextFromSqsMessageAttributes(sqsMessage *types.Message) context.Context {
-	return NewCarrier().Extract(context.Background(), sqsMessage.MessageAttributes)
-}
-
-// InjectIntoSqsMessageAttributes inserts tracing from context into the SQS message attributes.
-// `ctx` holds current context with trace information.
-// `sqsMessage` is outgoing SQS message that will be set to carry trace information.
-// Use InjectIntoSqsMessageAttributes right before sending out the SQS message.
-//
-// Deprecated: Use c := NewCarrier() followed by c.Inject().
-func InjectIntoSqsMessageAttributes(ctx context.Context, sqsMessage *types.Message) {
-	NewCarrier().Inject(ctx, sqsMessage.MessageAttributes)
-}
-
 // SqsCarrierAttributes is a message attribute carrier for SQS.
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SqsCarrierAttributes struct {
 	messageAttributes map[string]types.MessageAttributeValue
 	propagator        propagation.TextMapPropagator
-}
-
-// NewCarrierAttributes creates a carrier attached to an SQS message.
-//
-// Deprecated: Use NewCarrier().
-func NewCarrierAttributes(sqsMessage *types.Message) *SqsCarrierAttributes {
-	c := NewCarrier()
-	c.attach(sqsMessage.MessageAttributes)
-	return c
 }
 
 // NewCarrier creates a carrier for SQS.
@@ -135,16 +109,22 @@ func (c *SqsCarrierAttributes) Extract(ctx context.Context, messageAttributes ma
 	return c.propagator.Extract(ctx, c)
 }
 
-var ErrMaxAttrLimit = fmt.Errorf("max attribute limit reached") // ErrMaxAttrLimit signals max attribute limit reached.
+var (
+	ErrMaxAttrLimit           = errors.New("max attribute limit reached") // ErrMaxAttrLimit signals max attribute limit reached.
+	ErrMessageAttributesIsNil = errors.New("message attributes is nil")   // ErrMessageAttributesIsNil rejects nil message attributes.
+)
 
 // Inject inserts tracing from context into the SQS message attributes.
 // `ctx` holds current context with trace information.
 // `messageAttributes` should point to outgoing SQS message MessageAttributes which will carry the trace information.
-// `messageAttributes` must not be nil.
+// If `messageAttributes` is nil, error ErrMessageAttributesIsNil will be returned.
 // If `messageAttributes` holds 10 or more items, Inject will do nothing and return ErrMaxAttrLimit,
 // since SQS refuses messages with more than 10 attributes.
 // Use Inject right before sending out the SQS message.
 func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) error {
+	if messageAttributes == nil {
+		return ErrMessageAttributesIsNil
+	}
 	if len(messageAttributes) >= sqsMessageAttributeLimit {
 		return ErrMaxAttrLimit
 	}
@@ -155,6 +135,9 @@ func (c *SqsCarrierAttributes) Inject(ctx context.Context, messageAttributes map
 
 // Get returns the value for the key.
 func (c *SqsCarrierAttributes) Get(key string) string {
+	if c.messageAttributes == nil {
+		return ""
+	}
 	attr, found := c.messageAttributes[key]
 	if !found {
 		return ""
@@ -169,6 +152,9 @@ const stringType = "String"
 
 // Set stores a key-value pair.
 func (c *SqsCarrierAttributes) Set(key, value string) {
+	if c.messageAttributes == nil {
+		return
+	}
 	c.messageAttributes[key] = types.MessageAttributeValue{
 		DataType:    aws.String(stringType),
 		StringValue: aws.String(value),

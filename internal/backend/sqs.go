@@ -69,6 +69,7 @@ type SqsApplication struct {
 	QueueOutput SqsQueue
 	Tracer      trace.Tracer
 	BackendURL  string
+	Debug       bool
 }
 
 // SqsListener runs sqs application.
@@ -78,7 +79,7 @@ func SqsListener(app *SqsApplication) {
 
 	q := app.QueueInput
 
-	debug := true
+	debug := app.Debug
 
 	const cooldown = 10 * time.Second
 

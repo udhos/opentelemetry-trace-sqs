@@ -53,7 +53,9 @@ func sendSQSMessage(ctx context.Context, app *application, outboundSqsMessage ty
     defer span.End()
 
     // Inject the tracing context
-    otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes)
+    if errInject := otelsqs.NewCarrier().Inject(ctxNew, outboundSqsMessage.MessageAttributes); errInject != nil {
+        log.Printf("inject error: %v", errInject)
+    }
 
     // Now you can send the SQS message
 ```
@@ -80,7 +82,9 @@ func publish(ctx context.Context, topicArn, msg string) {
     }
 
     // Inject the tracing context
-    otelsns.NewCarrier().Inject(ctx, input.MessageAttributes)
+    if errInject := otelsns.NewCarrier().Inject(ctx, input.MessageAttributes); errInject != nil {
+        log.Printf("inject error: %v", errInject)
+    }
 
     // Now invoke SNS publish for input
 ```

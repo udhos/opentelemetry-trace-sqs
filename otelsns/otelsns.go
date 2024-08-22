@@ -22,7 +22,9 @@ Use `SnsCarrierAttributes.Inject` to inject trace context into SNS publishing.
 	    }
 
 	    // Inject the tracing context
-	    otelsns.NewCarrier().Inject(ctx, input.MessageAttributes)
+	    if errInject := otelsns.NewCarrier().Inject(ctx, input.MessageAttributes); errInject != nil {
+	        log.Printf("inject error: %v", errInject)
+	    }
 
 	    // Now invoke SNS publish for input
 */
@@ -30,9 +32,9 @@ package otelsns
 
 import (
 	"context"
+	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel/propagation"
@@ -47,27 +49,11 @@ func SetTextMapPropagator(propagator propagation.TextMapPropagator) {
 	defaultSnsPropagator = propagator
 }
 
-// InjectIntoSnsMessageAttributes inserts tracing from context into the SNS message attributes.
-//
-// Deprecated: Use c := NewCarrier() followed by c.Inject()
-func InjectIntoSnsMessageAttributes(ctx context.Context, input *sns.PublishInput) {
-	NewCarrier().Inject(ctx, input.MessageAttributes)
-}
-
 // SnsCarrierAttributes is a message attribute carrier for SNS.
 // https://pkg.go.dev/go.opentelemetry.io/otel/propagation#TextMapCarrier
 type SnsCarrierAttributes struct {
 	messageAttributes map[string]types.MessageAttributeValue
 	propagator        propagation.TextMapPropagator
-}
-
-// NewCarrierAttributes creates a carrier attached to an SNS input.
-//
-// Deprecated: Use c := NewCarrier()
-func NewCarrierAttributes(input *sns.PublishInput) *SnsCarrierAttributes {
-	c := NewCarrier()
-	c.attach(input.MessageAttributes)
-	return c
 }
 
 // NewCarrier creates a carrier for SNS.
@@ -93,15 +79,24 @@ func (c *SnsCarrierAttributes) attach(messageAttributes map[string]types.Message
 // Inject inserts tracing from context into the SNS message attributes.
 // `ctx` holds current context with trace information.
 // `messageAttributes` should point to outgoing SNS publish MessageAttributes which will carry the trace information.
-// `messageAttributes` must not be nil.
+// If `messageAttributes` is nil, error ErrMessageAttributesIsNil will be returned.
 // Use Inject right before publishing out to SNS.
-func (c *SnsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) {
+func (c *SnsCarrierAttributes) Inject(ctx context.Context, messageAttributes map[string]types.MessageAttributeValue) error {
+	if messageAttributes == nil {
+		return ErrMessageAttributesIsNil
+	}
 	c.attach(messageAttributes)
 	c.propagator.Inject(ctx, c)
+	return nil
 }
+
+var ErrMessageAttributesIsNil = errors.New("message attributes is nil") // ErrMessageAttributesIsNil rejects nil message attributes.
 
 // Get returns the value for the key.
 func (c *SnsCarrierAttributes) Get(key string) string {
+	if c.messageAttributes == nil {
+		return ""
+	}
 	attr, found := c.messageAttributes[key]
 	if !found {
 		return ""
@@ -116,6 +111,9 @@ const stringType = "String"
 
 // Set stores a key-value pair.
 func (c *SnsCarrierAttributes) Set(key, value string) {
+	if c.messageAttributes == nil {
+		return
+	}
 	c.messageAttributes[key] = types.MessageAttributeValue{
 		DataType:    aws.String(stringType),
 		StringValue: aws.String(value),

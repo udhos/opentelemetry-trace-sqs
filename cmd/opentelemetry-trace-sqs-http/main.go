@@ -37,6 +37,8 @@ func main() {
 		config: config.New(),
 	}
 
+	debug := os.Getenv("DEBUG") == "true"
+
 	//
 	// initialize tracing
 	//
@@ -98,6 +100,7 @@ func main() {
 		QueueOutput: app.queueOutput,
 		Tracer:      app.tracer,
 		BackendURL:  app.config.BackendURL,
+		Debug:       debug,
 	}
 
 	go backend.SqsListener(sqsApp)
@@ -153,7 +156,9 @@ func handlerRoute(app *application, w http.ResponseWriter, r *http.Request) {
 		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
 
-	otelsqs.NewCarrier().Inject(ctx, msg.MessageAttributes)
+	if errInject := otelsqs.NewCarrier().Inject(ctx, msg.MessageAttributes); errInject != nil {
+		log.Fatalf("inject error: %v", errInject)
+	}
 
 	//
 	// send to SQS

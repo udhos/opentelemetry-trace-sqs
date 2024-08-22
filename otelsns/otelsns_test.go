@@ -26,7 +26,8 @@ func TestSnSInjectExtract(t *testing.T) {
 	{
 		options := oteltrace.TraceOptions{
 			DefaultService:     me,
-			NoopTracerProvider: true,
+			NoopTracerProvider: false,
+			NoopPropagator:     false,
 			Debug:              true,
 		}
 
@@ -41,48 +42,104 @@ func TestSnSInjectExtract(t *testing.T) {
 		tracer = tr
 	}
 
-	ctx, span := tracer.Start(context.TODO(), me)
-	defer span.End()
+	t.Run("with non-nil attributes", func(t *testing.T) {
 
-	traceIDSent := span.SpanContext().TraceID().String()
+		ctx, span := tracer.Start(context.TODO(), me)
+		defer span.End()
 
-	t.Logf("traceIDSent:%s", traceIDSent)
+		traceIDSent := span.SpanContext().TraceID().String()
 
-	//
-	// Send
-	//
+		t.Logf("traceIDSent:%s", traceIDSent)
 
-	info := "hello"
-	input := sns.PublishInput{
-		Message:           aws.String(info),
-		MessageAttributes: make(map[string]types.MessageAttributeValue),
-	}
-	carrier := NewCarrier()
-	carrier.Inject(ctx, input.MessageAttributes)
+		//
+		// Send
+		//
 
-	//
-	// Receive
-	//
+		info := "hello"
+		input := sns.PublishInput{
+			Message:           aws.String(info),
+			MessageAttributes: make(map[string]types.MessageAttributeValue),
+		}
+		carrier := NewCarrier()
+		if errInject := carrier.Inject(ctx, input.MessageAttributes); errInject != nil {
+			t.Errorf("inject: %v", errInject)
+		}
 
-	msg := sqs_types.Message{
-		MessageAttributes: make(map[string]sqs_types.MessageAttributeValue),
-	}
+		//
+		// Receive
+		//
 
-	copyAttributes(&input, &msg)
+		msg := sqs_types.Message{
+			MessageAttributes: make(map[string]sqs_types.MessageAttributeValue),
+		}
 
-	carrierSQS := otelsqs.NewCarrier()
-	ctxNew := carrierSQS.Extract(ctx, msg.MessageAttributes)
+		copyAttributes(&input, &msg)
 
-	_, span2 := tracer.Start(ctxNew, me)
-	defer span2.End()
+		carrierSQS := otelsqs.NewCarrier()
+		ctxNew := carrierSQS.Extract(context.TODO(), msg.MessageAttributes)
 
-	traceIDRecv := span2.SpanContext().TraceID().String()
+		_, span2 := tracer.Start(ctxNew, me)
+		defer span2.End()
 
-	t.Logf("traceIDRecv:%s", traceIDRecv)
+		traceIDRecv := span2.SpanContext().TraceID().String()
 
-	if traceIDSent != traceIDRecv {
-		t.Errorf("traceIDSent:%s mismatches traceIDRecv:%s", traceIDSent, traceIDRecv)
-	}
+		t.Logf("traceIDRecv:%s", traceIDRecv)
+
+		if traceIDSent != traceIDRecv {
+			t.Errorf("traceIDSent:%s mismatches traceIDRecv:%s", traceIDSent, traceIDRecv)
+		}
+
+	})
+
+	t.Run("with nil attributes", func(t *testing.T) {
+
+		ctx, span := tracer.Start(context.TODO(), me)
+		defer span.End()
+
+		traceIDSent := span.SpanContext().TraceID().String()
+
+		t.Logf("traceIDSent:%s", traceIDSent)
+
+		//
+		// Send
+		//
+
+		info := "hello"
+		input := sns.PublishInput{
+			Message:           aws.String(info),
+			MessageAttributes: nil,
+		}
+		carrier := NewCarrier()
+		if errInject := carrier.Inject(ctx, input.MessageAttributes); errInject != nil {
+			t.Logf("inject: %v", errInject)
+		}
+
+		//
+		// Receive
+		//
+
+		msg := sqs_types.Message{
+			MessageAttributes: make(map[string]sqs_types.MessageAttributeValue),
+		}
+
+		copyAttributes(&input, &msg)
+
+		carrierSQS := otelsqs.NewCarrier()
+		ctxNew := carrierSQS.Extract(context.TODO(), msg.MessageAttributes)
+
+		_, span2 := tracer.Start(ctxNew, me)
+		defer span2.End()
+
+		traceIDRecv := span2.SpanContext().TraceID().String()
+
+		t.Logf("traceIDRecv:%s", traceIDRecv)
+
+		if traceIDSent == traceIDRecv {
+			t.Errorf("traceIDSent:%s matches traceIDRecv:%s", traceIDSent, traceIDRecv)
+		}
+
+	})
+
 }
 
 func copyAttributes(from *sns.PublishInput, to *sqs_types.Message) {
@@ -97,11 +154,12 @@ func copyAttributes(from *sns.PublishInput, to *sqs_types.Message) {
 	to.MessageAttributes = attr
 }
 
-func TestSqsCarrierAttributes(t *testing.T) {
+func TestSnsCarrierAttributes(t *testing.T) {
 	input := sns.PublishInput{
 		MessageAttributes: make(map[string]types.MessageAttributeValue),
 	}
-	carrier := NewCarrierAttributes(&input)
+	carrier := NewCarrier()
+	carrier.attach(input.MessageAttributes)
 
 	// no keys
 
