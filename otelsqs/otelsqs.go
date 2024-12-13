@@ -110,8 +110,11 @@ func (c *SqsCarrierAttributes) Extract(ctx context.Context, messageAttributes ma
 }
 
 var (
-	ErrMaxAttrLimit           = errors.New("max attribute limit reached") // ErrMaxAttrLimit signals max attribute limit reached.
-	ErrMessageAttributesIsNil = errors.New("message attributes is nil")   // ErrMessageAttributesIsNil rejects nil message attributes.
+	// ErrMaxAttrLimit signals max attribute limit reached.
+	ErrMaxAttrLimit = errors.New("max attribute limit reached")
+
+	// ErrMessageAttributesIsNil rejects nil message attributes.
+	ErrMessageAttributesIsNil = errors.New("message attributes is nil")
 )
 
 // Inject inserts tracing from context into the SQS message attributes.

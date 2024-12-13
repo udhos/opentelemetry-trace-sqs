@@ -90,7 +90,8 @@ func (c *SnsCarrierAttributes) Inject(ctx context.Context, messageAttributes map
 	return nil
 }
 
-var ErrMessageAttributesIsNil = errors.New("message attributes is nil") // ErrMessageAttributesIsNil rejects nil message attributes.
+// ErrMessageAttributesIsNil rejects nil message attributes.
+var ErrMessageAttributesIsNil = errors.New("message attributes is nil")
 
 // Get returns the value for the key.
 func (c *SnsCarrierAttributes) Get(key string) string {
