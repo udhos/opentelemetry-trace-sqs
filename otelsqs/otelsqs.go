@@ -145,10 +145,7 @@ func (c *SqsCarrierAttributes) Get(key string) string {
 	if !found {
 		return ""
 	}
-	if attr.StringValue == nil {
-		return ""
-	}
-	return *attr.StringValue
+	return aws.ToString(attr.StringValue)
 }
 
 const stringType = "String"
